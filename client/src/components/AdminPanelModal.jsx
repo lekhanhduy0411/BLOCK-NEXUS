@@ -128,9 +128,9 @@ export default function AdminPanelModal({ currentUser, onUserUpdated, onClose })
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#040711]/84 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-4xl max-h-[90dvh] flex flex-col animate-modal-in">
-        <div className="hud-panel-amber flex flex-col overflow-hidden max-h-[90dvh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-[#040711]/84 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-4xl h-[90dvh] max-h-[90dvh] flex flex-col min-h-0 animate-modal-in">
+        <div className="hud-panel-amber flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Tiêu đề */}
           <div className="px-5 py-4 border-b border-amber-400/25 shrink-0 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -172,8 +172,9 @@ export default function AdminPanelModal({ currentUser, onUserUpdated, onClose })
             </div>
           )}
 
-          {/* Nội dung 2 cột */}
-          <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-0">
+          {/* Nội dung 2 cột bọc trong scroll container độc lập */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             {/* Cột trái: Danh sách người chơi */}
             <div className="lg:col-span-6 flex flex-col gap-3 min-h-0">
               <div className="flex items-center gap-2">
@@ -376,6 +377,7 @@ export default function AdminPanelModal({ currentUser, onUserUpdated, onClose })
                   </button>
                 </div>
               )}
+            </div>
             </div>
           </div>
         </div>

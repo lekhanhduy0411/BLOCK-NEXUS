@@ -4,8 +4,6 @@ import {
   ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
-  Repeat2,
-  RotateCcw,
   RotateCw,
 } from 'lucide-react';
 import {
@@ -22,8 +20,9 @@ const COLS = 10;
 const ROWS = 20;
 
 // Pro DAS / ARR & Lock Delay Timing Constants (ms)
-const DAS_MS = 130;
-const ARR_MS = 28;
+const DAS_MS = 160;
+const ARR_MS = 32;
+const BUTTON_HOLD_DELAY_MS = 200; // Initial delay before on-screen button auto-repeats (prevents 2-cell single tap)
 const LOCK_DELAY_MS = 500;
 const HARD_DROP_STREAK_SEC = 0.06; // 60ms high-speed motion blur streak
 const MAX_BANK_TILT_RAD = (4 * Math.PI) / 180; // ±4deg banking tilt
@@ -206,9 +205,9 @@ export default function VelocityEngine({
 }) {
   const boardContainerRef = useRef(null);
   const canvasRef = useRef(null);
-  const holdCanvasRef = useRef(null);
   const nextCanvasRefs = useRef([null, null, null]);
   const actionsRef = useRef(null);
+  const holdTimeoutRef = useRef(null);
   const repeatIntervalRef = useRef(null);
 
   const settingsRef = useRef(settings);
@@ -248,8 +247,6 @@ export default function VelocityEngine({
       // Active piece separates Logical Grid State (gridX, gridY, rotation)
       // from Visual Interpolated State (visualX, visualY, visualRotOffset, bankTilt)
       active: null,
-      holdType: null,
-      holdUsed: false,
       score: 0,
       lines: 0,
       level: 1,
@@ -298,14 +295,6 @@ export default function VelocityEngine({
 
     const redrawPreviews = () => {
       const skin = settingsRef.current.blockSkin || 'CYBER_NEON';
-      if (holdCanvasRef.current) {
-        if (state.holdType) {
-          const def = TETROMINOES[state.holdType];
-          drawMiniPiecePreview(holdCanvasRef.current, def.preview, def.color, skin);
-        } else {
-          drawMiniPiecePreview(holdCanvasRef.current, null, null, skin);
-        }
-      }
       for (let i = 0; i < 3; i += 1) {
         const nextType = state.bag[i];
         const nextCanvas = nextCanvasRefs.current[i];
@@ -578,7 +567,6 @@ export default function VelocityEngine({
         triggerHaptic('place');
       }
 
-      state.holdUsed = false;
       syncHud();
       spawnNextPiece();
     };
@@ -643,17 +631,6 @@ export default function VelocityEngine({
       lockActivePiece();
     };
 
-    const holdPiece = () => {
-      if (!state.active || state.holdUsed || state.isGameOver || pausedRef.current) return;
-      soundEngine.playHold();
-      triggerHaptic('tap');
-      const currentType = state.active.type;
-      const previousHold = state.holdType;
-      state.holdType = currentType;
-      state.holdUsed = true;
-      spawnNextPiece(previousHold || null);
-    };
-
     actionsRef.current = {
       moveLeft: () => {
         soundEngine.unlock();
@@ -676,33 +653,14 @@ export default function VelocityEngine({
         soundEngine.unlock();
         rotatePiece(1);
       },
-      rotateCCW: () => {
-        soundEngine.unlock();
-        rotatePiece(-1);
-      },
-      hold: () => {
-        soundEngine.unlock();
-        holdPiece();
-      },
       redrawPreviews,
     };
 
-    // Custom Pro DAS / ARR Keyboard Controller (ignores OS key-repeat lag)
+    // Unified Classic Controls (identical 5 actions on PC & Mobile: ← → ↓ ↑ Space)
     const handleKeyDown = (evt) => {
       if (pausedRef.current || state.isGameOver) return;
       const code = evt.code;
-      const handled = [
-        'ArrowLeft',
-        'ArrowRight',
-        'ArrowDown',
-        'ArrowUp',
-        'Space',
-        'KeyX',
-        'KeyZ',
-        'KeyC',
-        'ShiftLeft',
-        'ShiftRight',
-      ];
+      const handled = ['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Space'];
       if (!handled.includes(code)) return;
 
       evt.preventDefault();
@@ -725,14 +683,10 @@ export default function VelocityEngine({
         state.keys.down = true;
         state.dropTimer = 0;
         softDropStep(true);
-      } else if (code === 'ArrowUp' || code === 'KeyX') {
+      } else if (code === 'ArrowUp') {
         rotatePiece(1);
-      } else if (code === 'KeyZ') {
-        rotatePiece(-1);
       } else if (code === 'Space') {
         hardDrop();
-      } else if (code === 'KeyC' || code === 'ShiftLeft' || code === 'ShiftRight') {
-        holdPiece();
       }
     };
 
@@ -1257,71 +1211,46 @@ export default function VelocityEngine({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
+      if (holdTimeoutRef.current) {
+        clearTimeout(holdTimeoutRef.current);
+      }
       if (repeatIntervalRef.current) {
         clearInterval(repeatIntervalRef.current);
       }
     };
   }, []);
 
-  const startHoldRepeat = (fn, delayMs = 68) => (evt) => {
-    evt.preventDefault();
-    fn();
-    if (repeatIntervalRef.current) clearInterval(repeatIntervalRef.current);
-    repeatIntervalRef.current = setInterval(fn, delayMs);
-  };
-
   const stopHoldRepeat = () => {
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
     if (repeatIntervalRef.current) {
       clearInterval(repeatIntervalRef.current);
       repeatIntervalRef.current = null;
     }
   };
 
+  const startHoldRepeat = (fn, repeatMs = 55, initialDelayMs = BUTTON_HOLD_DELAY_MS) => (evt) => {
+    evt.preventDefault();
+    if (evt.button !== undefined && evt.button !== 0) return;
+    stopHoldRepeat();
+    fn();
+    // Wait initialDelayMs (DAS) before starting continuous repeat so a single tap moves exactly 1 cell
+    holdTimeoutRef.current = setTimeout(() => {
+      holdTimeoutRef.current = null;
+      repeatIntervalRef.current = setInterval(fn, repeatMs);
+    }, initialDelayMs);
+  };
+
   return (
     <div className="flex flex-1 flex-col items-center justify-between w-full max-w-2xl mx-auto px-2 pb-2 gap-2 overflow-hidden select-none">
-      {/* Main Arena Row: HOLD | 10x20 CANVAS | NEXT */}
-      <div className="flex flex-1 w-full items-stretch justify-center gap-2 sm:gap-3 min-h-0">
-        {/* Left Sidebar: HOLD */}
-        <div className="flex flex-col items-center gap-2 w-[68px] sm:w-[92px] shrink-0 pt-1">
-          <button
-            type="button"
-            onClick={() => actionsRef.current?.hold()}
-            className="hud-panel-sm p-1.5 sm:p-2 w-full flex flex-col items-center border border-cyan-400/35 hover:border-cyan-400/70 transition-colors cursor-pointer"
-            title="Giữ khối (phím C)"
-          >
-            <span className="text-[10px] font-bold text-cyan-300 mb-1">Giữ [C]</span>
-            <canvas ref={holdCanvasRef} className="w-[54px] h-[44px] sm:w-[68px] sm:h-[52px]" />
-          </button>
-
-          <div className="hidden sm:flex flex-col gap-1.5 hud-panel-sm p-2.5 w-full text-[11px] text-slate-400">
-            <div className="font-bold text-slate-200 text-[11px] mb-0.5">Phím tắt</div>
-            <div className="flex justify-between">
-              <span>Trái/Phải</span>
-              <span className="font-mono text-cyan-300">← →</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Xoay</span>
-              <span className="font-mono text-cyan-300">↑ X Z</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Rơi nhanh</span>
-              <span className="font-mono text-cyan-300">↓</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Thả nhanh</span>
-              <span className="font-mono text-amber-300">Cách</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Giữ khối</span>
-              <span className="font-mono text-purple-300">C</span>
-            </div>
-          </div>
-        </div>
-
+      {/* Main Arena Row: 10x20 CANVAS | NEXT (Classic Unified Layout for Mobile & PC) */}
+      <div className="flex flex-1 w-full items-stretch justify-center gap-2.5 sm:gap-3.5 min-h-0">
         {/* Center: 10x20 Canvas */}
         <div
           ref={boardContainerRef}
-          className="flex flex-1 items-center justify-center min-h-0 max-w-[340px]"
+          className="flex flex-1 items-center justify-center min-h-0 max-w-[360px]"
         >
           <canvas
             ref={canvasRef}
@@ -1330,7 +1259,7 @@ export default function VelocityEngine({
         </div>
 
         {/* Right Sidebar: NEXT Queue */}
-        <div className="flex flex-col items-center gap-2 w-[68px] sm:w-[92px] shrink-0 pt-1">
+        <div className="flex flex-col items-center gap-2 w-[72px] sm:w-[92px] shrink-0 pt-1">
           <div className="hud-panel-sm p-1.5 sm:p-2 w-full flex flex-col items-center gap-1.5 border border-purple-400/35">
             <span className="text-[10px] font-bold text-purple-300">Tiếp theo</span>
             {[0, 1, 2].map((idx) => (
@@ -1344,7 +1273,7 @@ export default function VelocityEngine({
                   ref={(el) => {
                     nextCanvasRefs.current[idx] = el;
                   }}
-                  className="w-[52px] h-[38px] sm:w-[68px] sm:h-[46px]"
+                  className="w-[54px] h-[38px] sm:w-[68px] sm:h-[46px]"
                 />
               </div>
             ))}
@@ -1352,40 +1281,43 @@ export default function VelocityEngine({
         </div>
       </div>
 
-      {/* Responsive Tactile Arcade Touch Controls */}
-      <div className="w-full max-w-md grid grid-cols-5 gap-1.5 sm:gap-2 pt-0.5 shrink-0">
+      {/* Unified 5-Button Classic Arcade Controls (Identical on Mobile & PC) */}
+      <div className="w-full max-w-md grid grid-cols-5 gap-2 pt-0.5 shrink-0">
         <button
           type="button"
-          onPointerDown={startHoldRepeat(() => actionsRef.current?.moveLeft(), 52)}
+          onPointerDown={startHoldRepeat(() => actionsRef.current?.moveLeft(), 55)}
           onPointerUp={stopHoldRepeat}
           onPointerLeave={stopHoldRepeat}
           onPointerCancel={stopHoldRepeat}
-          className="btn-arcade btn-arcade-slate py-2.5 sm:py-2 flex items-center justify-center text-cyan-200 cursor-pointer"
-          aria-label="Move Left"
+          onLostPointerCapture={stopHoldRepeat}
+          className="btn-arcade btn-arcade-slate py-3 sm:py-2.5 flex items-center justify-center text-cyan-200 cursor-pointer"
+          aria-label="Sang trái"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
         <button
           type="button"
-          onPointerDown={startHoldRepeat(() => actionsRef.current?.softDrop(), 45)}
+          onPointerDown={startHoldRepeat(() => actionsRef.current?.softDrop(), 45, 160)}
           onPointerUp={stopHoldRepeat}
           onPointerLeave={stopHoldRepeat}
           onPointerCancel={stopHoldRepeat}
-          className="btn-arcade btn-arcade-slate py-2.5 sm:py-2 flex items-center justify-center text-cyan-200 cursor-pointer"
-          aria-label="Soft Drop"
+          onLostPointerCapture={stopHoldRepeat}
+          className="btn-arcade btn-arcade-slate py-3 sm:py-2.5 flex items-center justify-center text-cyan-200 cursor-pointer"
+          aria-label="Rơi nhanh"
         >
           <ArrowDown className="w-5 h-5" />
         </button>
 
         <button
           type="button"
-          onPointerDown={startHoldRepeat(() => actionsRef.current?.moveRight(), 52)}
+          onPointerDown={startHoldRepeat(() => actionsRef.current?.moveRight(), 55)}
           onPointerUp={stopHoldRepeat}
           onPointerLeave={stopHoldRepeat}
           onPointerCancel={stopHoldRepeat}
-          className="btn-arcade btn-arcade-slate py-2.5 sm:py-2 flex items-center justify-center text-cyan-200 cursor-pointer"
-          aria-label="Move Right"
+          onLostPointerCapture={stopHoldRepeat}
+          className="btn-arcade btn-arcade-slate py-3 sm:py-2.5 flex items-center justify-center text-cyan-200 cursor-pointer"
+          aria-label="Sang phải"
         >
           <ArrowRight className="w-5 h-5" />
         </button>
@@ -1396,8 +1328,8 @@ export default function VelocityEngine({
             e.preventDefault();
             actionsRef.current?.rotateCW();
           }}
-          className="btn-arcade btn-arcade-purple py-2.5 sm:py-2 flex items-center justify-center cursor-pointer"
-          aria-label="Rotate Clockwise"
+          className="btn-arcade btn-arcade-purple py-3 sm:py-2.5 flex items-center justify-center cursor-pointer"
+          aria-label="Xoay khối"
         >
           <RotateCw className="w-5 h-5" />
         </button>
@@ -1408,33 +1340,10 @@ export default function VelocityEngine({
             e.preventDefault();
             actionsRef.current?.hardDrop();
           }}
-          className="btn-arcade btn-arcade-amber py-2.5 sm:py-2 flex items-center justify-center cursor-pointer"
-          aria-label="Hard Drop"
+          className="btn-arcade btn-arcade-amber py-3 sm:py-2.5 flex items-center justify-center cursor-pointer"
+          aria-label="Thả ngay"
         >
           <ArrowDownToLine className="w-5 h-5" />
-        </button>
-
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            actionsRef.current?.rotateCCW();
-          }}
-          className="col-span-2 btn-arcade btn-arcade-slate py-1.5 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-200 sm:hidden cursor-pointer"
-        >
-          <RotateCcw className="w-3.5 h-3.5 text-purple-300" />
-          Xoay trái
-        </button>
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            actionsRef.current?.hold();
-          }}
-          className="col-span-3 btn-arcade btn-arcade-slate py-1.5 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-200 sm:hidden cursor-pointer"
-        >
-          <Repeat2 className="w-3.5 h-3.5 text-cyan-300" />
-          Giữ khối
         </button>
       </div>
     </div>

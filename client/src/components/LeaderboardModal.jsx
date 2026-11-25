@@ -128,9 +128,9 @@ export default function LeaderboardModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#040711]/82 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-2xl max-h-[88dvh] flex flex-col animate-modal-in">
-        <div className="hud-panel flex flex-col overflow-hidden max-h-[88dvh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-[#040711]/82 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-2xl h-[88dvh] max-h-[88dvh] flex flex-col min-h-0 animate-modal-in">
+        <div className="hud-panel flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Tiêu đề */}
           <div className="px-5 pt-4 pb-3 border-b border-cyan-400/20 shrink-0">
             <div className="flex items-center justify-between gap-2">
@@ -212,7 +212,7 @@ export default function LeaderboardModal({
           </div>
 
           {/* Danh sách người chơi */}
-          <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 space-y-2 min-h-[220px]">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-4 py-3 space-y-2">
             {loading ? (
               <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-2">
                 <RefreshCw className="w-6 h-6 animate-spin text-[#00f3ff]" />

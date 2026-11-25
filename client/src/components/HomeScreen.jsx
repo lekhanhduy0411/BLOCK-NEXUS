@@ -342,7 +342,7 @@ export default function HomeScreen({
                       Tốc Độ 10×20
                     </h2>
                     <p className="text-xs sm:text-sm text-slate-300/90 mt-1.5 leading-relaxed">
-                      Xếp khối rơi tốc độ cao trên lưới 10×20, hỗ trợ giữ khối, xoay mượt và thả nhanh.
+                      Xếp khối rơi cổ điển trên lưới 10×20, di chuyển, xoay khối và thả nhanh đồng bộ giữa điện thoại và máy tính.
                     </p>
                   </div>
                   <ModeDropIcon className="w-16 h-16 shrink-0 transition-transform duration-200 group-hover:-translate-y-0.5" />
