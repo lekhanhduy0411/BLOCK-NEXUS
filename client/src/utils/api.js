@@ -2,7 +2,7 @@ import { getAuthToken } from './storage';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
-async function request(path, { method = 'GET', body, token, timeoutMs = 15000 } = {}) {
+async function request(path, { method = 'GET', body, token, timeoutMs = 45000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
