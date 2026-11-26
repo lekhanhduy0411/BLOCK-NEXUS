@@ -15,6 +15,8 @@ import {
 } from './blockRenderer';
 import { soundEngine } from '../utils/sound';
 import { triggerHaptic } from '../utils/haptics';
+import { createSeededRng } from '../utils/seededRng';
+import { checkObjectivesCompleted } from '../utils/challengeStages';
 
 const COLS = 10;
 const ROWS = 20;
@@ -24,6 +26,7 @@ const DAS_MS = 160;
 const ARR_MS = 32;
 const BUTTON_HOLD_DELAY_MS = 200; // Initial delay before on-screen button auto-repeats (prevents 2-cell single tap)
 const LOCK_DELAY_MS = 500;
+const MAX_LOCK_RESETS = 12; // Move-Reset Lock Delay cap (resets only when piece drops below lowestYReached)
 const HARD_DROP_STREAK_SEC = 0.06; // 60ms high-speed motion blur streak
 const MAX_BANK_TILT_RAD = (4 * Math.PI) / 180; // ±4deg banking tilt
 
@@ -140,10 +143,34 @@ function createEmptyBoard() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 }
 
-function shuffleBag() {
+function createGarbageBoard(garbageRows, rng) {
+  const board = createEmptyBoard();
+  const count = Math.max(0, Math.min(12, Math.floor(garbageRows || 0)));
+  const garbagePalette = ['#475569', '#64748b', '#3b4c68'];
+  let prevPrimaryHole = -1;
+
+  for (let i = 0; i < count; i += 1) {
+    const rowIdx = ROWS - 1 - i;
+    let hole1 = Math.floor(rng() * COLS);
+    if (hole1 === prevPrimaryHole) {
+      hole1 = (hole1 + 1 + Math.floor(rng() * (COLS - 2))) % COLS;
+    }
+    prevPrimaryHole = hole1;
+
+    const extraHole = rng() < 0.45 ? (hole1 + 2 + Math.floor(rng() * (COLS - 3))) % COLS : -1;
+
+    for (let c = 0; c < COLS; c += 1) {
+      if (c === hole1 || c === extraHole) continue;
+      board[rowIdx][c] = garbagePalette[(rowIdx + c) % garbagePalette.length];
+    }
+  }
+  return board;
+}
+
+function shuffleBag(rng = Math.random) {
   const bag = [...PIECE_KEYS];
   for (let i = bag.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [bag[i], bag[j]] = [bag[j], bag[i]];
   }
   return bag;
@@ -200,8 +227,12 @@ export default function VelocityEngine({
   isPaused,
   settings,
   theme,
+  challengeStage = null,
   onHudUpdate,
   onGameOver,
+  onStageWin,
+  onAutoPause,
+  resumeSignal = 0,
 }) {
   const boardContainerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -209,12 +240,16 @@ export default function VelocityEngine({
   const actionsRef = useRef(null);
   const holdTimeoutRef = useRef(null);
   const repeatIntervalRef = useRef(null);
+  const countdownRef = useRef({ active: false, remaining: 0, lastStep: 0 });
+  const prevResumeSignalRef = useRef(resumeSignal);
 
   const settingsRef = useRef(settings);
   const themeRef = useRef(theme);
   const pausedRef = useRef(isPaused);
   const hudCallbackRef = useRef(onHudUpdate);
   const gameOverCallbackRef = useRef(onGameOver);
+  const stageWinCallbackRef = useRef(onStageWin);
+  const autoPauseCallbackRef = useRef(onAutoPause);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -232,7 +267,21 @@ export default function VelocityEngine({
   useEffect(() => {
     hudCallbackRef.current = onHudUpdate;
     gameOverCallbackRef.current = onGameOver;
-  }, [onHudUpdate, onGameOver]);
+    stageWinCallbackRef.current = onStageWin;
+    autoPauseCallbackRef.current = onAutoPause;
+  }, [onHudUpdate, onGameOver, onStageWin, onAutoPause]);
+
+  // Trigger 3 -> 2 -> 1 countdown on Canvas whenever player clicks Resume after Auto-Pause
+  useEffect(() => {
+    if (resumeSignal > prevResumeSignalRef.current) {
+      prevResumeSignalRef.current = resumeSignal;
+      countdownRef.current = {
+        active: true,
+        remaining: 2.4, // 3 beats × 0.8s each (3 -> 2 -> 1)
+        lastStep: 4,
+      };
+    }
+  }, [resumeSignal]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -240,16 +289,26 @@ export default function VelocityEngine({
     if (!canvas || !container) return undefined;
 
     const ctx = canvas.getContext('2d');
+    const isChallenge = Boolean(challengeStage);
+    const stageRng = isChallenge ? createSeededRng(challengeStage.seed) : null;
+    const bagRng = stageRng || Math.random;
+    const initialBoard =
+      isChallenge && (challengeStage.garbageRows || 0) > 0
+        ? createGarbageBoard(challengeStage.garbageRows, stageRng)
+        : createEmptyBoard();
+    const initialLevel = isChallenge ? Math.max(1, challengeStage.startLevel || 1) : 1;
 
     const state = {
-      board: createEmptyBoard(),
-      bag: [...shuffleBag(), ...shuffleBag()],
+      board: initialBoard,
+      bag: [...shuffleBag(bagRng), ...shuffleBag(bagRng)],
       // Active piece separates Logical Grid State (gridX, gridY, rotation)
       // from Visual Interpolated State (visualX, visualY, visualRotOffset, bankTilt)
       active: null,
       score: 0,
       lines: 0,
-      level: 1,
+      tetrises: 0,
+      level: initialLevel,
+      startLevel: initialLevel,
       combo: -1,
       b2b: false,
       dropTimer: 0,
@@ -257,6 +316,8 @@ export default function VelocityEngine({
       lockResets: 0,
       isGameOver: false,
       gameOverDelay: 0,
+      isStageCleared: false,
+      stageWinDelay: 0,
       // Visual FX
       particles: [],
       hardDropStreaks: [], // { matrix, color, gridX, startY, endY, elapsed, duration }
@@ -289,6 +350,7 @@ export default function VelocityEngine({
         score: state.score,
         level: state.level,
         linesCleared: state.lines,
+        tetrises: state.tetrises,
         combo: Math.max(0, state.combo),
       });
     };
@@ -355,9 +417,15 @@ export default function VelocityEngine({
       });
     };
 
+    const isInputBlocked = () =>
+      pausedRef.current ||
+      state.isGameOver ||
+      state.isStageCleared ||
+      countdownRef.current.active;
+
     const spawnNextPiece = (forcedType = null) => {
       if (state.bag.length < 7) {
-        state.bag.push(...shuffleBag());
+        state.bag.push(...shuffleBag(bagRng));
       }
       const type = forcedType || state.bag.shift();
       const def = TETROMINOES[type];
@@ -372,6 +440,7 @@ export default function VelocityEngine({
         // Logical Grid Coordinates
         gridX: startX,
         gridY: startY,
+        lowestYReached: startY,
         rotation: 0,
         // Visual Interpolated Coordinates
         visualX: startX,
@@ -402,14 +471,21 @@ export default function VelocityEngine({
       redrawPreviews();
     };
 
+    const trackLowestY = (piece) => {
+      if (piece && piece.gridY > piece.lowestYReached) {
+        piece.lowestYReached = piece.gridY;
+        state.lockResets = 0;
+      }
+    };
+
     const moveHorizontal = (dir) => {
-      if (!state.active || state.isGameOver || pausedRef.current) return false;
+      if (!state.active || isInputBlocked()) return false;
       if (!collides(state.active.matrix, state.active.gridX + dir, state.active.gridY)) {
         state.active.gridX += dir;
         soundEngine.playMove();
         if (
           collides(state.active.matrix, state.active.gridX, state.active.gridY + 1) &&
-          state.lockResets < 15
+          state.lockResets < MAX_LOCK_RESETS
         ) {
           state.lockTimer = 0;
           state.lockResets += 1;
@@ -420,7 +496,7 @@ export default function VelocityEngine({
     };
 
     const rotatePiece = (dir) => {
-      if (!state.active || state.isGameOver || pausedRef.current) return false;
+      if (!state.active || isInputBlocked()) return false;
       if (state.active.type === 'O') return true;
 
       const fromRot = state.active.rotation;
@@ -436,6 +512,7 @@ export default function VelocityEngine({
           state.active.gridX += dx;
           state.active.gridY += dy;
           state.active.rotation = toRot;
+          trackLowestY(state.active);
           // Smooth 90° visual rotation spring: start offset by -90° (or +90°) and decay to 0
           state.active.visualRotOffset += dir > 0 ? -Math.PI / 2 : Math.PI / 2;
           // Keep visualRotOffset clamped so rapid double-rotations stay crisp
@@ -449,7 +526,7 @@ export default function VelocityEngine({
 
           if (
             collides(state.active.matrix, state.active.gridX, state.active.gridY + 1) &&
-            state.lockResets < 15
+            state.lockResets < MAX_LOCK_RESETS
           ) {
             state.lockTimer = 0;
             state.lockResets += 1;
@@ -500,11 +577,14 @@ export default function VelocityEngine({
         const cleared = fullRows.length;
         const prevLevel = state.level;
         state.lines += cleared;
-        state.level = Math.floor(state.lines / 10) + 1;
+        state.level = Math.max(state.startLevel, state.startLevel + Math.floor(state.lines / 10));
 
         const baseTable = { 1: 100, 2: 300, 3: 500, 4: 800 };
         let pts = (baseTable[cleared] || 800) * state.level;
         const isTetris = cleared === 4;
+        if (isTetris) {
+          state.tetrises += 1;
+        }
         if (isTetris && state.b2b) {
           pts = Math.round(pts * 1.5);
         }
@@ -568,13 +648,45 @@ export default function VelocityEngine({
       }
 
       syncHud();
+
+      // Campaign Challenge immediate victory check (no timer)
+      if (isChallenge && !state.isStageCleared) {
+        const currentStats = {
+          score: state.score,
+          linesCleared: state.lines,
+          level: state.level,
+          tetrises: state.tetrises,
+          maxCombo: Math.max(0, state.combo),
+        };
+        if (checkObjectivesCompleted(challengeStage, currentStats)) {
+          state.active = null;
+          state.isStageCleared = true;
+          state.stageWinDelay = 0.35;
+          if (challengeStage.isBoss) {
+            soundEngine.playBossVictory();
+          } else {
+            soundEngine.playStageVictory();
+          }
+          triggerHaptic('multiClear');
+          addFloatingText(
+            state.layout.width / 2,
+            state.layout.height * 0.42,
+            challengeStage.isBoss ? 'HẠ BOSS!' : 'VƯỢT MÀN!',
+            '#fbbf24',
+            26
+          );
+          return;
+        }
+      }
+
       spawnNextPiece();
     };
 
     const softDropStep = (awardPoints = true) => {
-      if (!state.active || state.isGameOver || pausedRef.current) return false;
+      if (!state.active || isInputBlocked()) return false;
       if (!collides(state.active.matrix, state.active.gridX, state.active.gridY + 1)) {
         state.active.gridY += 1;
+        trackLowestY(state.active);
         if (awardPoints) {
           state.score += 1;
           syncHud();
@@ -585,7 +697,7 @@ export default function VelocityEngine({
     };
 
     const hardDrop = () => {
-      if (!state.active || state.isGameOver || pausedRef.current) return;
+      if (!state.active || isInputBlocked()) return;
       const startVisualY = state.active.visualY;
       const targetY = getGhostY(state.active);
       const distance = Math.max(0, targetY - state.active.gridY);
@@ -658,7 +770,7 @@ export default function VelocityEngine({
 
     // Unified Classic Controls (identical 5 actions on PC & Mobile: ← → ↓ ↑ Space)
     const handleKeyDown = (evt) => {
-      if (pausedRef.current || state.isGameOver) return;
+      if (isInputBlocked()) return;
       const code = evt.code;
       const handled = ['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Space'];
       if (!handled.includes(code)) return;
@@ -706,18 +818,37 @@ export default function VelocityEngine({
       }
     };
 
-    const handleWindowBlur = () => {
+    const triggerAutoPauseIfActive = () => {
       state.keys.left = false;
       state.keys.right = false;
       state.keys.down = false;
       state.dasDir = 0;
       state.dasTimer = 0;
       state.arrTimer = 0;
+      if (holdTimeoutRef.current) {
+        clearTimeout(holdTimeoutRef.current);
+        holdTimeoutRef.current = null;
+      }
+      if (repeatIntervalRef.current) {
+        clearInterval(repeatIntervalRef.current);
+        repeatIntervalRef.current = null;
+      }
+      if (!pausedRef.current && !state.isGameOver && !state.isStageCleared) {
+        countdownRef.current.active = false;
+        autoPauseCallbackRef.current?.();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        triggerAutoPauseIfActive();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('blur', triggerAutoPauseIfActive);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const computeLayout = () => {
       const rect = container.getBoundingClientRect();
@@ -763,7 +894,28 @@ export default function VelocityEngine({
       let activeIsGrounded = false;
       let currentDropInterval = getDropIntervalMs(state.level);
 
-      if (!pausedRef.current) {
+      // Update 3 -> 2 -> 1 resume countdown before unfreezing gravity
+      if (!pausedRef.current && countdownRef.current.active) {
+        const cd = countdownRef.current;
+        const stepBefore = Math.ceil(cd.remaining / 0.8);
+        if (stepBefore >= 1 && stepBefore < cd.lastStep) {
+          cd.lastStep = stepBefore;
+          soundEngine.playCountdownBeep(stepBefore);
+        }
+        cd.remaining -= dt;
+        const stepAfter = Math.ceil(cd.remaining / 0.8);
+        if (stepAfter >= 1 && stepAfter < cd.lastStep) {
+          cd.lastStep = stepAfter;
+          soundEngine.playCountdownBeep(stepAfter);
+        }
+        if (cd.remaining <= 0) {
+          cd.active = false;
+          cd.remaining = 0;
+          soundEngine.playCountdownBeep(0);
+        }
+      }
+
+      if (!pausedRef.current && !countdownRef.current.active) {
         if (state.shakeTime > 0) {
           state.shakeTime = Math.max(0, state.shakeTime - dt);
         }
@@ -919,6 +1071,20 @@ export default function VelocityEngine({
           if (ft.life <= 0) state.floatingTexts.splice(i, 1);
         }
 
+        // Campaign Challenge Stage Win delay trigger
+        if (state.isStageCleared && state.stageWinDelay > 0) {
+          state.stageWinDelay -= dt;
+          if (state.stageWinDelay <= 0) {
+            stageWinCallbackRef.current?.({
+              score: state.score,
+              linesCleared: state.lines,
+              level: state.level,
+              tetrises: state.tetrises,
+              maxCombo: Math.max(0, state.combo),
+            });
+          }
+        }
+
         // Game Over delay trigger
         if (state.isGameOver && state.gameOverDelay > 0) {
           state.gameOverDelay -= dt;
@@ -927,6 +1093,7 @@ export default function VelocityEngine({
               score: state.score,
               linesCleared: state.lines,
               level: state.level,
+              tetrises: state.tetrises,
               maxCombo: Math.max(0, state.combo),
             });
           }
@@ -1087,7 +1254,8 @@ export default function VelocityEngine({
                     (ghostY + r) * cellSize,
                     cellSize,
                     color,
-                    0.13
+                    0.19,
+                    0.62
                   );
                 }
               }
@@ -1102,9 +1270,11 @@ export default function VelocityEngine({
         const lockProgress = activeIsGrounded
           ? Math.min(1, state.lockTimer / LOCK_DELAY_MS)
           : 0;
+        const lockExhausted = state.lockResets >= MAX_LOCK_RESETS;
         const lockPulse =
           lockProgress > 0
-            ? (0.5 + 0.5 * Math.sin(now * 0.028)) * (0.28 + lockProgress * 0.52)
+            ? (0.5 + 0.5 * Math.sin(now * (lockExhausted ? 0.042 : 0.028))) *
+              (0.28 + lockProgress * 0.54)
             : 0;
 
         ctx.save();
@@ -1125,8 +1295,10 @@ export default function VelocityEngine({
               ctx.save();
               ctx.fillStyle = `rgba(255, 255, 255, ${lockPulse * 0.65})`;
               ctx.fillRect(localX + 2, localY + 2, cellSize - 4, cellSize - 4);
-              ctx.strokeStyle = `rgba(251, 191, 36, ${Math.min(1, lockProgress + 0.25)})`;
-              ctx.lineWidth = 1.6;
+              ctx.strokeStyle = lockExhausted
+                ? `rgba(255, 42, 95, ${Math.min(1, lockProgress + 0.35)})`
+                : `rgba(251, 191, 36, ${Math.min(1, lockProgress + 0.25)})`;
+              ctx.lineWidth = lockExhausted ? 2 : 1.6;
               ctx.strokeRect(localX + 1.5, localY + 1.5, cellSize - 3, cellSize - 3);
               ctx.restore();
             }
@@ -1153,7 +1325,11 @@ export default function VelocityEngine({
           const barY = (piece.gridY + maxRow + 1) * cellSize - 3;
           ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
           ctx.fillRect(barX, barY, barW, 3);
-          ctx.fillStyle = lockProgress > 0.7 ? '#f59e0b' : '#00f3ff';
+          ctx.fillStyle = lockExhausted
+            ? '#ff2a5f'
+            : lockProgress > 0.7
+              ? '#f59e0b'
+              : '#00f3ff';
           ctx.fillRect(barX, barY, barW * (1 - lockProgress), 3);
         }
       }
@@ -1201,6 +1377,36 @@ export default function VelocityEngine({
       ctx.strokeStyle = currentTheme.boardBorder;
       ctx.lineWidth = 1.5;
       ctx.stroke();
+
+      // 3 -> 2 -> 1 Resume Countdown Overlay directly on Canvas
+      if (!pausedRef.current && countdownRef.current.active) {
+        const cd = countdownRef.current;
+        const step = Math.max(1, Math.min(3, Math.ceil(cd.remaining / 0.8)));
+        const beatRemain = cd.remaining - (step - 1) * 0.8;
+        const beatProgress = Math.max(0, Math.min(1, 1 - beatRemain / 0.8));
+        const eased = 1 - Math.pow(1 - beatProgress, 3);
+        const scale = 1.5 - 0.58 * eased;
+        const alpha = beatProgress < 0.78 ? 1 : Math.max(0, (1 - beatProgress) / 0.22);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(4, 7, 18, 0.48)';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.translate(width / 2, height / 2);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = alpha;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `900 ${Math.round(cellSize * 4.2)}px "JetBrains Mono", "Outfit", sans-serif`;
+        ctx.shadowColor = step === 1 ? '#fbbf24' : '#00f3ff';
+        ctx.shadowBlur = 28;
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#04101f';
+        ctx.strokeText(String(step), 0, 0);
+        ctx.fillStyle = step === 1 ? '#fbbf24' : '#00f3ff';
+        ctx.fillText(String(step), 0, 0);
+        ctx.restore();
+      }
     };
 
     rafId = requestAnimationFrame(loop);
@@ -1210,7 +1416,8 @@ export default function VelocityEngine({
       resizeObserver.disconnect();
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('blur', triggerAutoPauseIfActive);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (holdTimeoutRef.current) {
         clearTimeout(holdTimeoutRef.current);
       }

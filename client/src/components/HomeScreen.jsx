@@ -1,4 +1,4 @@
-import { LogOut, UserPlus } from 'lucide-react';
+import { ClipboardList, Crown, LogOut, Swords, UserPlus } from 'lucide-react';
 import { getBackgroundById } from '../data/backgrounds';
 import { soundEngine } from '../utils/sound';
 import GameBackdrop from './GameBackdrop';
@@ -19,9 +19,13 @@ export default function HomeScreen({
   currentUser,
   guestSession,
   guestRecords,
+  challengeProgress = null,
+  savedDragSnapshot = null,
   onStartGame,
+  onOpenChallenges,
   onOpenLeaderboard,
   onOpenShop,
+  onOpenQuests,
   onOpenAdmin,
   onOpenSettings,
   onOpenRegister,
@@ -49,6 +53,12 @@ export default function HomeScreen({
   const unclaimedRewards = !isGuest
     ? (currentUser?.rewards || []).filter((r) => !r.claimed)
     : [];
+
+  const claimableQuestsCount = !isGuest
+    ? (currentUser?.dailyQuests || []).filter(
+        (q) => !q.claimed && (q.progress || 0) >= (q.target || 1)
+      ).length
+    : 0;
 
   return (
     <div className="min-h-dvh w-full flex flex-col justify-center px-4 sm:px-6 py-4 relative overflow-x-hidden animate-screen-in">
@@ -102,7 +112,7 @@ export default function HomeScreen({
                       className="mt-0.5 inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-[#00f3ff] hover:text-cyan-200 transition-colors cursor-pointer truncate max-w-full"
                     >
                       <UserPlus className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Đăng ký để vào BXH & tích Xu</span>
+                      <span className="truncate">Đăng nhập / Tạo tài khoản</span>
                     </button>
                   ) : (
                     <div className="mt-0.5 text-xs sm:text-sm text-slate-300 truncate">
@@ -140,6 +150,28 @@ export default function HomeScreen({
                 </button>
               )}
 
+              {!isGuest && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.unlock();
+                    soundEngine.playButtonClick();
+                    onOpenQuests?.();
+                  }}
+                  className="relative btn-arcade btn-arcade-slate flex-1 md:flex-none px-2.5 sm:px-4 h-11 text-xs sm:text-base font-extrabold inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer"
+                  title="Nhiệm vụ hằng ngày"
+                >
+                  <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-300 shrink-0" />
+                  <span>Nhiệm vụ</span>
+                  {claimableQuestsCount > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-[#070913] shadow-[0_0_10px_rgba(251,191,36,0.95)] animate-pulse"
+                      aria-label={`${claimableQuestsCount} nhiệm vụ đã hoàn thành`}
+                    />
+                  )}
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -147,7 +179,7 @@ export default function HomeScreen({
                   soundEngine.playButtonClick();
                   onOpenShop();
                 }}
-                className="btn-arcade btn-arcade-slate flex-1 md:flex-none px-3 sm:px-4 h-11 text-xs sm:text-base font-extrabold inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer"
+                className="btn-arcade btn-arcade-slate flex-1 md:flex-none px-2.5 sm:px-4 h-11 text-xs sm:text-base font-extrabold inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer"
               >
                 <ShopCoreIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                 <span>Cửa hàng</span>
@@ -160,7 +192,7 @@ export default function HomeScreen({
                   soundEngine.playButtonClick();
                   onOpenLeaderboard('dragMode');
                 }}
-                className="btn-arcade btn-arcade-slate flex-1 md:flex-none px-3 sm:px-4 h-11 text-xs sm:text-base font-extrabold inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer"
+                className="btn-arcade btn-arcade-slate flex-1 md:flex-none px-2.5 sm:px-4 h-11 text-xs sm:text-base font-extrabold inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer"
               >
                 <TrophyHexIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                 <span>Xếp hạng</span>
@@ -230,7 +262,7 @@ export default function HomeScreen({
           </div>
         )}
 
-        {/* 2. Khối tiêu đề tích hợp gọn sát phía trên 2 thẻ chế độ */}
+        {/* 2. Khối tiêu đề tích hợp gọn sát phía trên + Nút nổi bật Chiến Dịch 50 Màn Thử Thách */}
         <section className="flex flex-wrap items-center justify-between gap-3 px-1 mt-0.5">
           <div className="flex items-center gap-3.5">
             <NexusLogoMark className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
@@ -239,10 +271,27 @@ export default function HomeScreen({
                 BLOCK <span className="text-[#00f3ff]">NEXUS</span>
               </h1>
               <p className="text-sm text-slate-300 font-medium mt-1">
-                Chọn chế độ xếp khối để bắt đầu ngay
+                Chọn chế độ xếp khối hoặc chinh phục 50 màn thử thách
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              soundEngine.unlock();
+              soundEngine.playButtonClick();
+              onOpenChallenges?.('8x8');
+            }}
+            className="btn-arcade btn-arcade-amber px-4 sm:px-5 py-3 text-sm sm:text-base font-black inline-flex items-center justify-center gap-2.5 w-full sm:w-auto cursor-pointer shadow-[0_0_24px_rgba(245,158,11,0.28)]"
+          >
+            <Swords className="w-5 h-5 shrink-0" />
+            <span>Thử Thách 50 Màn</span>
+            <span className="font-mono text-xs px-2 py-0.5 bg-slate-950/75 text-amber-300 border border-amber-300/40 tabular-nums">
+              {challengeProgress?.totalCleared ?? 0}/100
+            </span>
+            <Crown className="w-4 h-4 shrink-0 hidden sm:inline" />
+          </button>
         </section>
 
         {/* 3. Hai thẻ chọn chế độ ôm gọn nội dung (không khoảng trống thừa) */}
@@ -272,9 +321,16 @@ export default function HomeScreen({
 
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                    Chiến Thuật 8×8
-                  </h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                      Chiến Thuật 8×8
+                    </h2>
+                    {savedDragSnapshot && (
+                      <span className="text-[11px] font-extrabold px-2 py-0.5 bg-cyan-500/20 border border-[#00f3ff]/65 text-cyan-200 font-mono tabular-nums">
+                        Đang dở: {(savedDragSnapshot.score || 0).toLocaleString()}đ
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-slate-300 mt-1 leading-snug">
                     Kéo thả khối trên lưới 8×8, xóa hàng ngang và dọc liên tiếp để nhân chuỗi điểm không giới hạn.
                   </p>

@@ -253,7 +253,15 @@ export function drawStyledBlock(ctx, x, y, size, color, skin = 'CYBER_NEON', alp
   ctx.restore();
 }
 
-export function drawGhostBlock(ctx, x, y, size, color = '#00f3ff', fillAlpha = 0.14) {
+export function drawGhostBlock(
+  ctx,
+  x,
+  y,
+  size,
+  color = '#00f3ff',
+  fillAlpha = 0.19,
+  borderAlpha = 0.62
+) {
   const pad = Math.max(1.8, size * 0.075);
   const bx = x + pad;
   const by = y + pad;
@@ -264,8 +272,8 @@ export function drawGhostBlock(ctx, x, y, size, color = '#00f3ff', fillAlpha = 0
   ctx.fillStyle = hexToRgba(color, fillAlpha);
   ctx.fillRect(bx, by, bs, bs);
 
-  ctx.strokeStyle = hexToRgba(color, 0.55);
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = hexToRgba(color, borderAlpha);
+  ctx.lineWidth = 1.25;
   ctx.strokeRect(bx + 0.5, by + 0.5, bs - 1, bs - 1);
 
   // Tactical corner target brackets

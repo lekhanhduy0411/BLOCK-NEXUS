@@ -12,6 +12,20 @@ const rewardSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const dailyQuestSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    title: { type: String, required: true },
+    mode: { type: String, enum: ['8x8', '10x20', 'any'], required: true },
+    metric: { type: String, required: true },
+    target: { type: Number, required: true, min: 1 },
+    progress: { type: Number, default: 0, min: 0 },
+    reward: { type: Number, required: true, min: 0 },
+    claimed: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 const userScoreSchema = new mongoose.Schema(
   {
     username: {
@@ -72,6 +86,34 @@ const userScoreSchema = new mongoose.Schema(
       type: [rewardSchema],
       default: [],
     },
+    dailyDateKey: {
+      type: String,
+      default: '',
+    },
+    dailyCoinsEarned: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    dailyModesPlayed: {
+      type: [String],
+      default: [],
+    },
+    dailyQuests: {
+      type: [dailyQuestSchema],
+      default: [],
+    },
+    challenge: {
+      strategistHighest: { type: Number, default: 0, min: 0, max: 50 },
+      velocityHighest: { type: Number, default: 0, min: 0, max: 50 },
+      totalCleared: { type: Number, default: 0, min: 0, max: 100 },
+      strategistBestScores: { type: Map, of: Number, default: {} },
+      velocityBestScores: { type: Map, of: Number, default: {} },
+      strategistTotalScore: { type: Number, default: 0, min: 0 },
+      velocityTotalScore: { type: Number, default: 0, min: 0 },
+      totalChallengeScore: { type: Number, default: 0, min: 0 },
+      lastProgressAt: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,
@@ -87,6 +129,40 @@ userScoreSchema.index({
   'records.dropMode.weeklyScore': -1,
   'records.dropMode.updatedAt': 1,
 });
+
+// Campaign Challenge Leaderboard Compound Indexes (no time-based ranking)
+userScoreSchema.index({
+  'challenge.totalCleared': -1,
+  'challenge.totalChallengeScore': -1,
+  'challenge.lastProgressAt': 1,
+});
+
+userScoreSchema.index({
+  'challenge.strategistHighest': -1,
+  'challenge.strategistTotalScore': -1,
+  'challenge.lastProgressAt': 1,
+});
+
+userScoreSchema.index({
+  'challenge.velocityHighest': -1,
+  'challenge.velocityTotalScore': -1,
+  'challenge.lastProgressAt': 1,
+});
+
+function toPlainScoreMap(rawMap) {
+  const out = {};
+  if (!rawMap) return out;
+  if (rawMap instanceof Map) {
+    rawMap.forEach((v, k) => {
+      out[String(k)] = Number(v) || 0;
+    });
+  } else if (typeof rawMap === 'object') {
+    Object.entries(rawMap).forEach(([k, v]) => {
+      out[String(k)] = Number(v) || 0;
+    });
+  }
+  return out;
+}
 
 userScoreSchema.methods.toPublicProfile = function toPublicProfile() {
   return {
@@ -119,6 +195,29 @@ userScoreSchema.methods.toPublicProfile = function toPublicProfile() {
       claimed: r.claimed,
       awardedAt: r.awardedAt,
     })),
+    dailyDateKey: this.dailyDateKey || '',
+    dailyCoinsEarned: this.dailyCoinsEarned ?? 0,
+    dailyQuests: (this.dailyQuests || []).map((q) => ({
+      id: q.id,
+      title: q.title,
+      mode: q.mode,
+      metric: q.metric,
+      target: q.target,
+      progress: q.progress ?? 0,
+      reward: q.reward ?? 0,
+      claimed: Boolean(q.claimed),
+    })),
+    challenge: {
+      strategistHighest: this.challenge?.strategistHighest ?? 0,
+      velocityHighest: this.challenge?.velocityHighest ?? 0,
+      totalCleared: this.challenge?.totalCleared ?? 0,
+      strategistBestScores: toPlainScoreMap(this.challenge?.strategistBestScores),
+      velocityBestScores: toPlainScoreMap(this.challenge?.velocityBestScores),
+      strategistTotalScore: this.challenge?.strategistTotalScore ?? 0,
+      velocityTotalScore: this.challenge?.velocityTotalScore ?? 0,
+      totalChallengeScore: this.challenge?.totalChallengeScore ?? 0,
+      lastProgressAt: this.challenge?.lastProgressAt ?? null,
+    },
     createdAt: this.createdAt,
   };
 };

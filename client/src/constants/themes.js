@@ -36,4 +36,6 @@ export const DEFAULT_SETTINGS = {
   ghostPreview: true,
   motionTrail: true,
   blockSkin: 'CYBER_NEON',
+  backdropDim: 0.35,
+  backdropBlur: false,
 };

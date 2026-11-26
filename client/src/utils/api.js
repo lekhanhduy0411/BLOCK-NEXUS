@@ -43,6 +43,10 @@ async function request(path, { method = 'GET', body, token, timeoutMs = 45000 } 
 export const api = {
   healthCheck: () => request('/api/health', { timeoutMs: 8000 }),
 
+  wakeUpServer: () => {
+    fetch(`${API_BASE}/api/health`, { method: 'GET', cache: 'no-store' }).catch(() => {});
+  },
+
   register: ({ username, password, guestStats }) =>
     request('/api/auth/register', {
       method: 'POST',
@@ -59,13 +63,39 @@ export const api = {
 
   getMe: () => request('/api/auth/me'),
 
-  submitScore: ({ mode, score, maxCombo = 0, linesCleared = 0 }) =>
+  startGame: (mode) =>
+    request('/api/game/start', {
+      method: 'POST',
+      body: { mode },
+      timeoutMs: 25000,
+    }),
+
+  getDailyQuests: () => request('/api/quests/daily'),
+
+  claimDailyQuest: (questId) =>
+    request('/api/quests/claim', {
+      method: 'POST',
+      body: { questId },
+    }),
+
+  submitScore: ({ mode, score, maxCombo = 0, linesCleared = 0, level = 1, sessionId }) =>
     request('/api/scores/submit', {
       method: 'POST',
-      body: { mode, score, maxCombo, linesCleared },
+      body: { mode, score, maxCombo, linesCleared, level, sessionId },
     }),
 
   getLeaderboard: (mode) => request(`/api/scores/leaderboard/${mode}`),
+
+  getChallengeStages: () => request('/api/challenges/stages'),
+
+  completeChallengeStage: ({ mode, stageNumber, stats }) =>
+    request('/api/challenges/complete', {
+      method: 'POST',
+      body: { mode, stageNumber, stats },
+    }),
+
+  getChallengeLeaderboard: (filter = 'all') =>
+    request(`/api/challenges/leaderboard?filter=${encodeURIComponent(filter)}`),
 
   getShopCatalog: () => request('/api/shop/catalog'),
 

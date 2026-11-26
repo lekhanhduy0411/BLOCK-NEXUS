@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Check, Lock, UserPlus } from 'lucide-react';
+import { Check, Eye, Lock, UserPlus } from 'lucide-react';
 import { BACKGROUND_TIERS, GAME_BACKGROUNDS, TIER_LABELS } from '../data/backgrounds';
 import { api } from '../utils/api';
 import { soundEngine } from '../utils/sound';
 import GameBackdrop from './GameBackdrop';
+import ShopPreviewModal from './ShopPreviewModal';
 import {
   CloseCrossIcon,
   NexusCoinIcon,
@@ -57,6 +58,7 @@ function MiniNeonBlocksOverlay({ accentColor }) {
 export default function ShopModal({
   isGuest,
   currentUser,
+  settings,
   onUserUpdated,
   onOpenRegister,
   onClose,
@@ -64,6 +66,7 @@ export default function ShopModal({
   const [selectedTier, setSelectedTier] = useState('ALL');
   const [busyId, setBusyId] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [previewItem, setPreviewItem] = useState(null);
 
   const coins = currentUser?.coins ?? 0;
   const owned = currentUser?.ownedBackgrounds?.length
@@ -268,7 +271,22 @@ export default function ShopModal({
                     }`}
                   >
                     {/* Vùng xem trước cảnh nền h-36 (144px) cố định + 4 khối Neon mẫu */}
-                    <div className="relative h-36 w-full overflow-hidden shrink-0 border-b border-white/10">
+                    <div
+                      onClick={() => {
+                        soundEngine.playButtonClick();
+                        setPreviewItem(item);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setPreviewItem(item);
+                        }
+                      }}
+                      title="Nhấn để xem thử toàn màn hình"
+                      className="relative h-36 w-full overflow-hidden shrink-0 border-b border-white/10 cursor-pointer group"
+                    >
                       <GameBackdrop bgId={item.id} isPreview={true} />
 
                       {/* Nhãn góc trên */}
@@ -314,48 +332,63 @@ export default function ShopModal({
                         </p>
                       </div>
 
-                      {isEquipped ? (
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled
-                          className="w-full py-2.5 text-xs font-extrabold bg-cyan-500/15 border border-[#00f3ff]/50 text-[#00f3ff]"
+                          onClick={() => {
+                            soundEngine.playButtonClick();
+                            setPreviewItem(item);
+                          }}
+                          className="btn-arcade btn-arcade-slate px-3 py-2.5 text-xs font-extrabold inline-flex items-center justify-center gap-1 shrink-0 cursor-pointer"
+                          title="Xem thử trên bàn chơi"
                         >
-                          Đang trang bị
+                          <Eye className="w-3.5 h-3.5 text-cyan-300" />
+                          <span>Xem thử</span>
                         </button>
-                      ) : isOwned ? (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => handleEquip(item)}
-                          className="btn-arcade btn-arcade-cyan w-full py-2.5 text-xs font-extrabold cursor-pointer"
-                        >
-                          {isBusy ? 'Đang áp dụng...' : 'Trang bị ngay'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isBusy || (!isGuest && !canAfford)}
-                          onClick={() => handleBuy(item)}
-                          className={`btn-arcade w-full py-2.5 text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer ${
-                            isGuest
-                              ? 'btn-arcade-slate text-slate-200'
-                              : canAfford
-                                ? 'btn-arcade-amber'
-                                : 'btn-arcade-slate text-slate-500'
-                          }`}
-                        >
-                          {isBusy ? (
-                            'Đang mua...'
-                          ) : (
-                            <>
-                              <NexusCoinIcon className="w-4 h-4 shrink-0" />
-                              <span className="tabular-nums">
-                                Mua · {item.price.toLocaleString()} Xu
-                              </span>
-                            </>
-                          )}
-                        </button>
-                      )}
+
+                        {isEquipped ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="flex-1 py-2.5 text-xs font-extrabold bg-cyan-500/15 border border-[#00f3ff]/50 text-[#00f3ff]"
+                          >
+                            Đang trang bị
+                          </button>
+                        ) : isOwned ? (
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleEquip(item)}
+                            className="btn-arcade btn-arcade-cyan flex-1 py-2.5 text-xs font-extrabold cursor-pointer"
+                          >
+                            {isBusy ? 'Đang áp dụng...' : 'Trang bị'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isBusy || (!isGuest && !canAfford)}
+                            onClick={() => handleBuy(item)}
+                            className={`btn-arcade flex-1 py-2.5 text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer ${
+                              isGuest
+                                ? 'btn-arcade-slate text-slate-200'
+                                : canAfford
+                                  ? 'btn-arcade-amber'
+                                  : 'btn-arcade-slate text-slate-500'
+                            }`}
+                          >
+                            {isBusy ? (
+                              'Đang mua...'
+                            ) : (
+                              <>
+                                <NexusCoinIcon className="w-4 h-4 shrink-0" />
+                                <span className="tabular-nums">
+                                  {item.price.toLocaleString()} Xu
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -364,6 +397,23 @@ export default function ShopModal({
           </div>
         </div>
       </div>
+
+      {previewItem && (
+        <ShopPreviewModal
+          item={previewItem}
+          isOwned={owned.includes(previewItem.id)}
+          isEquipped={equipped === previewItem.id}
+          canAfford={coins >= previewItem.price}
+          isGuest={isGuest}
+          isBusy={busyId === previewItem.id}
+          blockSkin={settings?.blockSkin || 'CYBER_NEON'}
+          initialDim={settings?.backdropDim ?? 0.35}
+          initialBlur={Boolean(settings?.backdropBlur)}
+          onBuy={handleBuy}
+          onEquip={handleEquip}
+          onClose={() => setPreviewItem(null)}
+        />
+      )}
     </div>
   );
 }

@@ -8,6 +8,9 @@ import scoreRoutes from './routes/scores.js';
 import shopRoutes from './routes/shop.js';
 import rewardRoutes from './routes/rewards.js';
 import adminRoutes from './routes/admin.js';
+import gameRoutes from './routes/game.js';
+import questRoutes from './routes/quests.js';
+import challengeRoutes from './routes/challenges.js';
 import { getHoChiMinhWeekInfo, initWeeklyResetCron } from './jobs/weeklyReset.js';
 
 const app = express();
@@ -38,10 +41,12 @@ app.use(
 
 app.use(express.json({ limit: '100kb' }));
 
-// Health check & Render wake-up endpoint
+// Health check & Render wake-up endpoint (zero DB queries)
 app.get('/api/health', (_req, res) => {
   const { weekKey, nextResetAt } = getHoChiMinhWeekInfo();
-  return res.json({
+  return res.status(200).json({
+    ok: true,
+    ts: Date.now(),
     status: 'ok',
     service: 'block-nexus-api',
     dbConnected: mongoose.connection.readyState === 1,
@@ -65,6 +70,9 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/game', gameRoutes);
+app.use('/api/quests', questRoutes);
+app.use('/api/challenges', challengeRoutes);
 app.use('/api/scores', scoreRoutes);
 app.use('/api/shop', shopRoutes);
 app.use('/api/rewards', rewardRoutes);

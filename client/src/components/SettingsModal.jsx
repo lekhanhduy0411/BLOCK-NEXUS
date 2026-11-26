@@ -146,6 +146,54 @@ export default function SettingsModal({
                 />
               </div>
 
+              {/* Độ tối nền (0% - 75%) */}
+              <div className="hud-panel-sm p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-bold text-white">Độ tối nền</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      Tăng tương phản giữa khối xếp và khung cảnh nền
+                    </div>
+                  </div>
+                  <span className="font-mono font-black text-sm text-[#00f3ff] tabular-nums shrink-0">
+                    {Math.round((settings.backdropDim ?? 0.35) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={75}
+                  step={5}
+                  value={Math.round((settings.backdropDim ?? 0.35) * 100)}
+                  onChange={(e) => {
+                    const nextDim = Math.max(0, Math.min(0.75, Number(e.target.value) / 100));
+                    onUpdateSettings({ ...settings, backdropDim: nextDim });
+                  }}
+                  aria-label="Độ tối nền"
+                  className="mt-3 w-full accent-[#00f3ff] cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] font-mono text-slate-500 mt-1">
+                  <span>0%</span>
+                  <span>35%</span>
+                  <span>75%</span>
+                </div>
+              </div>
+
+              {/* Làm mờ nền */}
+              <div className="hud-panel-sm flex items-center justify-between p-3.5">
+                <div className="pr-3">
+                  <div className="text-sm font-bold text-white">Làm mờ nền</div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    Phủ lớp mờ nhẹ giúp tập trung hoàn toàn vào bàn chơi
+                  </div>
+                </div>
+                <HudToggleSwitch
+                  checked={Boolean(settings.backdropBlur)}
+                  onChange={() => toggleSetting('backdropBlur')}
+                  label="Bật/tắt làm mờ nền"
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={() => {

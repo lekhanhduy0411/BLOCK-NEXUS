@@ -227,6 +227,77 @@ class SoundEngine {
     this.playTone({ freqStart: 1318.5, freqEnd: 1567.98, type: 'triangle', duration: 0.24, volume: 0.16, delay: 0.08 });
   }
 
+  playRivalOvertake() {
+    const notes = [659.25, 830.61, 987.77, 1318.51];
+    notes.forEach((freq, idx) => {
+      this.playTone({
+        freqStart: freq,
+        freqEnd: freq * 1.02,
+        type: idx === notes.length - 1 ? 'triangle' : 'sine',
+        duration: idx === notes.length - 1 ? 0.26 : 0.11,
+        volume: 0.13,
+        delay: idx * 0.055,
+      });
+    });
+  }
+
+  playCountdownBeep(step = 3) {
+    // Ascending crisp synth pips: 3 -> 2 -> 1 -> GO(0)
+    const freqMap = { 3: 523.25, 2: 659.25, 1: 880.0, 0: 1046.5 };
+    const freq = freqMap[step] || 587.33;
+    const isFinal = step <= 1;
+    this.playTone({
+      freqStart: freq,
+      freqEnd: isFinal ? freq * 1.04 : freq,
+      type: isFinal ? 'triangle' : 'sine',
+      duration: isFinal ? 0.18 : 0.11,
+      volume: isFinal ? 0.16 : 0.12,
+    });
+  }
+
+  playStageVictory() {
+    const fanfare = [523.25, 659.25, 783.99, 1046.5];
+    fanfare.forEach((freq, idx) => {
+      this.playTone({
+        freqStart: freq,
+        freqEnd: freq * 1.015,
+        type: idx === fanfare.length - 1 ? 'triangle' : 'sine',
+        duration: idx === fanfare.length - 1 ? 0.36 : 0.13,
+        volume: 0.15,
+        delay: idx * 0.08,
+      });
+    });
+  }
+
+  playBossVictory() {
+    const fanfare = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
+    fanfare.forEach((freq, idx) => {
+      this.playTone({
+        freqStart: freq,
+        freqEnd: freq * 1.025,
+        type: idx >= 3 ? 'triangle' : 'sine',
+        duration: idx === fanfare.length - 1 ? 0.52 : 0.16,
+        volume: idx === fanfare.length - 1 ? 0.19 : 0.15,
+        delay: idx * 0.075,
+      });
+    });
+    // Shimmering harmonic sparkle chord
+    this.playTone({
+      freqStart: 2093.0,
+      freqEnd: 2349.32,
+      type: 'sine',
+      duration: 0.45,
+      volume: 0.11,
+      delay: 0.36,
+    });
+    this.playNoiseBurst({
+      duration: 0.18,
+      volume: 0.07,
+      filterFreq: 3800,
+      delay: 0.32,
+    });
+  }
+
   playGameOver() {
     const descent = [392.0, 349.23, 311.13, 261.63, 196.0];
     descent.forEach((freq, idx) => {

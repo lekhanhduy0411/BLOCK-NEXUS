@@ -1,8 +1,19 @@
 import express from 'express';
 import UserScore from '../models/UserScore.js';
+import GameSession from '../models/GameSession.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
 import { normalizeMode, WEEKLY_REWARDS } from '../config/constants.js';
 import { checkAndRunWeeklyReset, getHoChiMinhWeekInfo } from '../jobs/weeklyReset.js';
+import {
+  DAILY_COIN_CAP,
+  applyMatchToDailyQuests,
+  calculateMatchCoins,
+  findNextRival,
+  getTodayVNDateKey,
+  normalizeUserDailyState,
+  toSessionMode,
+  validateScoreSanity,
+} from '../utils/dailyQuests.js';
 
 const router = express.Router();
 
@@ -13,16 +24,50 @@ router.post('/submit', requireAuth, async (req, res, next) => {
 
     const mode = normalizeMode(req.body?.mode);
     if (!mode) {
-      return res.status(400).json({ error: 'Invalid game mode. Expected dragMode or dropMode.' });
+      return res.status(400).json({ error: 'Chế độ chơi không hợp lệ.' });
+    }
+    const sessionMode = toSessionMode(mode);
+
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Thiếu mã phiên thi đấu hợp lệ.' });
     }
 
     const score = Math.floor(Number(req.body?.score));
-    if (!Number.isFinite(score) || score < 0 || score > 100_000_000) {
-      return res.status(400).json({ error: 'Invalid score value.' });
+    const combo = Math.floor(Number(req.body?.maxCombo ?? 0));
+    const lines = Math.floor(Number(req.body?.linesCleared ?? 0));
+    const level = Math.max(1, Math.min(999, Math.floor(Number(req.body?.level ?? 1) || 1)));
+
+    // Atomic single-use session verification
+    const session = await GameSession.findOneAndUpdate(
+      {
+        sessionId,
+        userId: req.user._id,
+        mode: sessionMode,
+        used: false,
+      },
+      { $set: { used: true } },
+      { new: true }
+    );
+
+    if (!session) {
+      return res.status(400).json({
+        error: 'Phiên thi đấu không hợp lệ, đã hết hạn hoặc đã được ghi nhận.',
+      });
     }
 
-    const combo = Math.max(0, Math.min(100_000, Math.floor(Number(req.body?.maxCombo || 0))));
-    const lines = Math.max(0, Math.min(100_000, Math.floor(Number(req.body?.linesCleared || 0))));
+    const durationSec = Math.max(0, (Date.now() - new Date(session.startedAt).getTime()) / 1000);
+    const sanity = validateScoreSanity({
+      mode,
+      score,
+      maxCombo: combo,
+      linesCleared: lines,
+      durationSec,
+    });
+
+    if (!sanity.valid) {
+      return res.status(400).json({ error: sanity.reason || 'Kết quả thi đấu không hợp lệ.' });
+    }
 
     const prevModeRecord = req.user.records?.[mode] || {
       allTimeHigh: 0,
@@ -31,6 +76,26 @@ router.post('/submit', requireAuth, async (req, res, next) => {
 
     const isNewAllTimeHigh = score > (prevModeRecord.allTimeHigh || 0);
     const isNewWeeklyHigh = score > (prevModeRecord.weeklyScore || 0);
+
+    // Daily coin reward + Daily Quests update (backwards-compatible with older accounts)
+    const todayKey = getTodayVNDateKey();
+    const daily = normalizeUserDailyState(req.user, todayKey);
+    const { matchCoinsAwarded, nextDailyCoinsEarned } = calculateMatchCoins({
+      mode,
+      score,
+      currentDailyCoinsEarned: daily.dailyCoinsEarned,
+    });
+
+    const { dailyQuests: updatedQuests, dailyModesPlayed: updatedModesPlayed } =
+      applyMatchToDailyQuests({
+        dailyQuests: daily.dailyQuests,
+        dailyModesPlayed: daily.dailyModesPlayed,
+        sessionMode,
+        score,
+        maxCombo: combo,
+        linesCleared: lines,
+        level,
+      });
 
     const maxUpdate = {
       [`records.${mode}.allTimeHigh`]: score,
@@ -43,9 +108,22 @@ router.post('/submit', requireAuth, async (req, res, next) => {
       maxUpdate['records.dropMode.maxLines'] = lines;
     }
 
-    const updateDoc = { $max: maxUpdate };
+    const setUpdate = {
+      dailyDateKey: todayKey,
+      dailyCoinsEarned: nextDailyCoinsEarned,
+      dailyModesPlayed: updatedModesPlayed,
+      dailyQuests: updatedQuests,
+    };
     if (isNewWeeklyHigh || isNewAllTimeHigh) {
-      updateDoc.$set = { [`records.${mode}.updatedAt`]: new Date() };
+      setUpdate[`records.${mode}.updatedAt`] = new Date();
+    }
+
+    const updateDoc = {
+      $max: maxUpdate,
+      $set: setUpdate,
+    };
+    if (matchCoinsAwarded > 0) {
+      updateDoc.$inc = { coins: matchCoinsAwarded };
     }
 
     const updatedUser = await UserScore.findByIdAndUpdate(req.userId, updateDoc, {
@@ -67,6 +145,7 @@ router.post('/submit', requireAuth, async (req, res, next) => {
     });
 
     const weeklyRank = higherRankedCount + 1;
+    const nextRival = await findNextRival(updatedUser._id, mode, userWeeklyScore);
 
     return res.json({
       mode,
@@ -74,6 +153,11 @@ router.post('/submit', requireAuth, async (req, res, next) => {
       isNewAllTimeHigh,
       isNewWeeklyHigh,
       weeklyRank,
+      nextRival,
+      matchCoinsAwarded,
+      dailyCoinsEarned: nextDailyCoinsEarned,
+      dailyCoinCap: DAILY_COIN_CAP,
+      dailyQuests: updatedQuests,
       user: updatedUser.toPublicProfile(),
     });
   } catch (err) {

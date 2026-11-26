@@ -5,7 +5,7 @@
       "destination": "https://block-nexus.onrender.com/api/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|assets/|sw\\.js|registerSW\\.js|workbox-.*\\.js|manifest\\.webmanifest|manifest\\.json|favicon-32x32\\.png|apple-touch-icon\\.png|icon-.*\\.png).*)",
       "destination": "/index.html"
     }
   ]

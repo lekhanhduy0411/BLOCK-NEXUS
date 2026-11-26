@@ -2,8 +2,17 @@ import { useEffect, useRef } from 'react';
 import { drawGhostBlock, drawRoundedRect, drawStyledBlock, hexToRgba } from './blockRenderer';
 import { soundEngine } from '../utils/sound';
 import { triggerHaptic } from '../utils/haptics';
+import { createSeededRng } from '../utils/seededRng';
+import { checkObjectivesCompleted } from '../utils/challengeStages';
+import { clearStrategistSnapshot, saveStrategistSnapshot } from '../utils/storage';
 
 const GRID_SIZE = 8;
+const GRACE_WINDOW = 3; // Combo stays alive for up to 2 non-clearing moves; resets on the 3rd
+
+// Precomputed 64-bit BigInt Row & Column Masks for sub-2ms solvable-tray DFS
+const ROW_MASKS = Array.from({ length: GRID_SIZE }, (_, r) => 0xffn << BigInt(r * GRID_SIZE));
+const COL_MASKS = Array.from({ length: GRID_SIZE }, (_, c) => 0x0101010101010101n << BigInt(c));
+const PLACEMENT_CACHE = new WeakMap();
 
 // Motion & Feel Constants (Frame-Rate Independent)
 const TRAY_SCALE = 0.65;
@@ -97,14 +106,216 @@ function drawFourPointStar(ctx, x, y, outerR, innerR, rot = 0) {
   ctx.fill();
 }
 
-function pickWeightedShape(pool) {
+function pickWeightedShape(pool, rng = Math.random) {
   const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
-  let r = Math.random() * totalWeight;
+  let r = rng() * totalWeight;
   for (const item of pool) {
     r -= item.weight;
     if (r <= 0) return item.cells;
   }
   return pool[0].cells;
+}
+
+function countPieceCells(matrix) {
+  let count = 0;
+  for (let r = 0; r < matrix.length; r += 1) {
+    for (let c = 0; c < matrix[r].length; c += 1) {
+      if (matrix[r][c]) count += 1;
+    }
+  }
+  return count;
+}
+
+export function gridToBitboard(grid) {
+  if (typeof grid === 'bigint') return grid;
+  let mask = 0n;
+  for (let r = 0; r < GRID_SIZE; r += 1) {
+    const row = grid[r];
+    const rowOffset = r * GRID_SIZE;
+    for (let c = 0; c < GRID_SIZE; c += 1) {
+      if (row[c] !== null && row[c] !== 0 && row[c] !== false) {
+        mask |= 1n << BigInt(rowOffset + c);
+      }
+    }
+  }
+  return mask;
+}
+
+function getPlacementMasks(matrix) {
+  const cached = PLACEMENT_CACHE.get(matrix);
+  if (cached) return cached;
+
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  const masks = [];
+  for (let r = 0; r <= GRID_SIZE - rows; r += 1) {
+    for (let c = 0; c <= GRID_SIZE - cols; c += 1) {
+      let m = 0n;
+      for (let pr = 0; pr < rows; pr += 1) {
+        for (let pc = 0; pc < cols; pc += 1) {
+          if (matrix[pr][pc]) {
+            m |= 1n << BigInt((r + pr) * GRID_SIZE + (c + pc));
+          }
+        }
+      }
+      masks.push(m);
+    }
+  }
+  PLACEMENT_CACHE.set(matrix, masks);
+  return masks;
+}
+
+function clearLinesOnBitboard(boardMask) {
+  let clearMask = 0n;
+  let clearedCount = 0;
+  for (let r = 0; r < GRID_SIZE; r += 1) {
+    const rm = ROW_MASKS[r];
+    if ((boardMask & rm) === rm) {
+      clearMask |= rm;
+      clearedCount += 1;
+    }
+  }
+  for (let c = 0; c < GRID_SIZE; c += 1) {
+    const cm = COL_MASKS[c];
+    if ((boardMask & cm) === cm) {
+      clearMask |= cm;
+      clearedCount += 1;
+    }
+  }
+  return {
+    nextBoard: clearMask === 0n ? boardMask : boardMask & ~clearMask,
+    clearedCount,
+  };
+}
+
+/**
+ * Pure 64-bit BigInt DFS solver checking whether all remaining pieces in a 3-piece tray
+ * can be placed in at least one valid permutation (up to 3! = 6 orders, simulating line clears).
+ * Prioritizes line-clearing branches first and caps explored states to guarantee < 2ms runtime.
+ */
+export function isTraySolvable(grid, pieces, maxStates = 120) {
+  const activePieces = (pieces || []).filter(Boolean);
+  const count = activePieces.length;
+  if (count === 0) return true;
+
+  const boardInit = gridToBitboard(grid);
+  const pieceMasks = activePieces.map((p) => getPlacementMasks(p.matrix || p));
+  const fullRemMask = (1 << count) - 1;
+  const failedStates = new Set();
+  let statesVisited = 0;
+
+  const dfs = (boardMask, remMask) => {
+    if (remMask === 0) return true;
+    if (statesVisited >= maxStates) return false;
+
+    const stateKey = `${remMask}:${boardMask}`;
+    if (failedStates.has(stateKey)) return false;
+    statesVisited += 1;
+
+    const clearingMoves = [];
+    const regularMoves = [];
+
+    for (let i = 0; i < count; i += 1) {
+      const bit = 1 << i;
+      if ((remMask & bit) === 0) continue;
+      const nextRem = remMask ^ bit;
+      const placements = pieceMasks[i];
+
+      for (let j = 0; j < placements.length; j += 1) {
+        const pMask = placements[j];
+        if ((boardMask & pMask) !== 0n) continue;
+        const placed = boardMask | pMask;
+        const { nextBoard, clearedCount } = clearLinesOnBitboard(placed);
+        if (nextRem === 0) return true;
+        if (clearedCount > 0) {
+          clearingMoves.push({ nextBoard, nextRem });
+        } else {
+          regularMoves.push({ nextBoard, nextRem });
+        }
+      }
+    }
+
+    for (let k = 0; k < clearingMoves.length; k += 1) {
+      if (statesVisited >= maxStates) return false;
+      const mv = clearingMoves[k];
+      if (dfs(mv.nextBoard, mv.nextRem)) return true;
+    }
+
+    for (let k = 0; k < regularMoves.length; k += 1) {
+      if (statesVisited >= maxStates) return false;
+      const mv = regularMoves[k];
+      if (dfs(mv.nextBoard, mv.nextRem)) return true;
+    }
+
+    failedStates.add(stateKey);
+    return false;
+  };
+
+  return dfs(boardInit, fullRemMask);
+}
+
+function createTrayPiece(matrix, idx, rng = Math.random) {
+  const color = NEON_COLORS[Math.floor(rng() * NEON_COLORS.length)];
+  return {
+    id: `${idx}_${Math.floor(rng() * 1e9)}`,
+    matrix,
+    color,
+    spawnAnim: 0,
+  };
+}
+
+/**
+ * Deterministic 3-piece tray for Campaign Challenge stages (independent of current board state
+ * so every retry plays the exact same puzzle sequence).
+ */
+function generateSeededChallengeTray(trayRng, presetBlocks = 0) {
+  return Array.from({ length: 3 }, (_, idx) => {
+    // Keep slot 0 agile on denser stages while staying 100% deterministic
+    const pool = presetBlocks >= 10 && idx === 0 ? SMALL_SHAPES : POLYOMINO_SHAPES;
+    return createTrayPiece(pickWeightedShape(pool, trayRng), idx, trayRng);
+  });
+}
+
+/**
+ * Deterministic preset obstacle grid for 8×8 Challenge stages.
+ * Guarantees no pre-filled row/column (max 6 cells per row/col) and ensures the initial tray has a valid move.
+ */
+function generateSeededPresetBoard(presetCount, boardRng, initialTray) {
+  const grid = createEmptyGrid();
+  const count = Math.max(0, Math.min(24, Math.floor(presetCount || 0)));
+  const rowCounts = Array(GRID_SIZE).fill(0);
+  const colCounts = Array(GRID_SIZE).fill(0);
+
+  // Shuffle all 64 cell coordinates deterministically
+  const coords = [];
+  for (let r = 0; r < GRID_SIZE; r += 1) {
+    for (let c = 0; c < GRID_SIZE; c += 1) {
+      coords.push([r, c]);
+    }
+  }
+  for (let i = coords.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(boardRng() * (i + 1));
+    [coords[i], coords[j]] = [coords[j], coords[i]];
+  }
+
+  const placedCoords = [];
+  for (let i = 0; i < coords.length && placedCoords.length < count; i += 1) {
+    const [r, c] = coords[i];
+    if (rowCounts[r] >= 6 || colCounts[c] >= 6) continue;
+    const color = NEON_COLORS[Math.floor(boardRng() * NEON_COLORS.length)];
+    grid[r][c] = color;
+    rowCounts[r] += 1;
+    colCounts[c] += 1;
+    placedCoords.push([r, c]);
+  }
+
+  // Deterministic safeguard: ensure at least 1 piece in the opening tray fits
+  while (initialTray && !hasAnyValidMove(grid, initialTray) && placedCoords.length > 0) {
+    const [r, c] = placedCoords.pop();
+    grid[r][c] = null;
+  }
+
+  return grid;
 }
 
 function generateTray(grid) {
@@ -116,17 +327,48 @@ function generateTray(grid) {
   }
   const boardCrowded = filled / (GRID_SIZE * GRID_SIZE) > 0.58;
 
-  return Array.from({ length: 3 }, (_, idx) => {
+  const tray = Array.from({ length: 3 }, (_, idx) => {
     const pool = boardCrowded && idx === 0 ? SMALL_SHAPES : POLYOMINO_SHAPES;
-    const matrix = pickWeightedShape(pool);
-    const color = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
-    return {
-      id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
-      matrix,
-      color,
-      spawnAnim: 0,
-    };
+    return createTrayPiece(pickWeightedShape(pool), idx);
   });
+
+  // Up to 8 retries: replace largest piece with a small/medium piece (<= 3 cells) until solvable
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (isTraySolvable(grid, tray, 120)) {
+      return tray;
+    }
+    let largestIdx = 0;
+    let largestCells = -1;
+    for (let i = 0; i < tray.length; i += 1) {
+      const cells = countPieceCells(tray[i].matrix);
+      if (cells > largestCells) {
+        largestCells = cells;
+        largestIdx = i;
+      }
+    }
+    tray[largestIdx] = createTrayPiece(pickWeightedShape(SMALL_SHAPES), largestIdx);
+  }
+
+  if (isTraySolvable(grid, tray, 120)) {
+    return tray;
+  }
+
+  // Safe fallback: ensure at least 1 piece can fit on the board (unless even 1x1 has no space)
+  if (!hasAnyValidMove(grid, tray)) {
+    const boardMask = gridToBitboard(grid);
+    const orderedSmall = [...SMALL_SHAPES].sort(
+      (a, b) => countPieceCells(a.cells) - countPieceCells(b.cells)
+    );
+    for (let i = 0; i < orderedSmall.length; i += 1) {
+      const candidateMasks = getPlacementMasks(orderedSmall[i].cells);
+      if (candidateMasks.some((m) => (boardMask & m) === 0n)) {
+        tray[0] = createTrayPiece(orderedSmall[i].cells, 0);
+        break;
+      }
+    }
+  }
+
+  return tray;
 }
 
 function canPlacePiece(grid, matrix, startRow, startCol) {
@@ -157,20 +399,18 @@ function hasAnyValidMove(grid, tray) {
 }
 
 function findPotentialClears(grid, matrix, startRow, startCol) {
-  const fullRows = new Set();
-  const fullCols = new Set();
+  const fullRows = [];
+  const fullCols = [];
+  let rowMask = 0;
+  let colMask = 0;
+  const mRows = matrix.length;
+  const mCols = matrix[0].length;
 
   const tempCell = (r, c) => {
     if (grid[r][c] !== null) return true;
     const pr = r - startRow;
     const pc = c - startCol;
-    if (
-      pr >= 0 &&
-      pr < matrix.length &&
-      pc >= 0 &&
-      pc < matrix[0].length &&
-      matrix[pr][pc]
-    ) {
+    if (pr >= 0 && pr < mRows && pc >= 0 && pc < mCols && matrix[pr][pc]) {
       return true;
     }
     return false;
@@ -184,7 +424,10 @@ function findPotentialClears(grid, matrix, startRow, startCol) {
         break;
       }
     }
-    if (full) fullRows.add(r);
+    if (full) {
+      fullRows.push(r);
+      rowMask |= 1 << r;
+    }
   }
 
   for (let c = 0; c < GRID_SIZE; c += 1) {
@@ -195,18 +438,25 @@ function findPotentialClears(grid, matrix, startRow, startCol) {
         break;
       }
     }
-    if (full) fullCols.add(c);
+    if (full) {
+      fullCols.push(c);
+      colMask |= 1 << c;
+    }
   }
 
-  return { fullRows, fullCols };
+  return { fullRows, fullCols, rowMask, colMask };
 }
 
 export default function StrategistEngine({
   isPaused,
   settings,
   theme,
+  initialSnapshot = null,
+  sessionIdRef = null,
+  challengeStage = null,
   onHudUpdate,
   onGameOver,
+  onStageWin,
 }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -216,6 +466,7 @@ export default function StrategistEngine({
   const pausedRef = useRef(isPaused);
   const hudCallbackRef = useRef(onHudUpdate);
   const gameOverCallbackRef = useRef(onGameOver);
+  const stageWinCallbackRef = useRef(onStageWin);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -232,7 +483,8 @@ export default function StrategistEngine({
   useEffect(() => {
     hudCallbackRef.current = onHudUpdate;
     gameOverCallbackRef.current = onGameOver;
-  }, [onHudUpdate, onGameOver]);
+    stageWinCallbackRef.current = onStageWin;
+  }, [onHudUpdate, onGameOver, onStageWin]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -240,16 +492,64 @@ export default function StrategistEngine({
     if (!canvas || !container) return undefined;
 
     const ctx = canvas.getContext('2d');
-    const initialGrid = createEmptyGrid();
+    const isChallenge = Boolean(challengeStage);
+    const boardRng = isChallenge ? createSeededRng(challengeStage.seed) : null;
+    const trayRng = isChallenge ? createSeededRng(challengeStage.seed + 101) : null;
+
+    let initialGrid = createEmptyGrid();
+    let initialTray = null;
+    let initScore = 0;
+    let initCombo = 0;
+    let initGrace = 0;
+    let initMaxCombo = 0;
+    let initLines = 0;
+
+    if (isChallenge) {
+      initialTray = generateSeededChallengeTray(trayRng, challengeStage.presetBlocks || 0);
+      initialGrid = generateSeededPresetBoard(
+        challengeStage.presetBlocks || 0,
+        boardRng,
+        initialTray
+      );
+    } else if (
+      initialSnapshot &&
+      Array.isArray(initialSnapshot.board) &&
+      initialSnapshot.board.length === GRID_SIZE &&
+      Array.isArray(initialSnapshot.tray) &&
+      initialSnapshot.tray.length === 3
+    ) {
+      initialGrid = initialSnapshot.board.map((row) =>
+        Array.isArray(row) ? row.slice(0, GRID_SIZE) : Array(GRID_SIZE).fill(null)
+      );
+      initialTray = initialSnapshot.tray.map((p) =>
+        p
+          ? {
+              ...p,
+              matrix: p.matrix.map((r) => [...r]),
+              spawnAnim: 1,
+            }
+          : null
+      );
+      initScore = Math.max(0, Math.floor(Number(initialSnapshot.score) || 0));
+      initCombo = Math.max(0, Math.floor(Number(initialSnapshot.comboStreak) || 0));
+      initGrace = Math.max(0, Math.floor(Number(initialSnapshot.movesSinceLastClear) || 0));
+      initMaxCombo = Math.max(0, Math.floor(Number(initialSnapshot.maxCombo) || 0));
+      initLines = Math.max(0, Math.floor(Number(initialSnapshot.linesCleared) || 0));
+    } else {
+      initialTray = generateTray(initialGrid);
+    }
 
     const state = {
       grid: initialGrid,
-      tray: generateTray(initialGrid),
-      score: 0,
-      comboStreak: 0, // Unlimited consecutive clear multiplier (x1, x2, ... x8, ... xN)
-      maxCombo: 0,
-      linesCleared: 0,
+      tray: initialTray,
+      score: initScore,
+      comboStreak: initCombo, // Unlimited consecutive clear multiplier (x1, x2, ... x8, ... xN)
+      movesSinceLastClear: initGrace, // Grace Window = 3: stays alive up to 2 non-clearing placements
+      maxCombo: initMaxCombo,
+      linesCleared: initLines,
       piecesPlaced: 0,
+      isStageCleared: false,
+      stageWinDelay: 0,
       // Active Spring-Tracked Drag State
       dragging: null,
       // 80ms Magnetic Snap Glides in flight
@@ -287,6 +587,7 @@ export default function StrategistEngine({
       hudCallbackRef.current?.({
         score: state.score,
         combo: state.comboStreak,
+        movesSinceLastClear: state.movesSinceLastClear,
         maxCombo: state.maxCombo,
         linesCleared: state.linesCleared,
       });
@@ -417,14 +718,40 @@ export default function StrategistEngine({
 
       drag.hoverRow = hoverRow;
       drag.hoverCol = hoverCol;
-      drag.valid = canPlacePiece(state.grid, matrix, hoverRow, hoverCol);
+      const valid = canPlacePiece(state.grid, matrix, hoverRow, hoverCol);
+      drag.valid = valid;
+
+      if (
+        hoverRow !== drag.lastPreviewRow ||
+        hoverCol !== drag.lastPreviewCol ||
+        valid !== drag.lastPreviewValid
+      ) {
+        drag.lastPreviewRow = hoverRow;
+        drag.lastPreviewCol = hoverCol;
+        drag.lastPreviewValid = valid;
+        if (valid) {
+          const clears = findPotentialClears(state.grid, matrix, hoverRow, hoverCol);
+          drag.previewRows = clears.fullRows;
+          drag.previewCols = clears.fullCols;
+          drag.previewRowMask = clears.rowMask;
+          drag.previewColMask = clears.colMask;
+        } else {
+          drag.previewRows = [];
+          drag.previewCols = [];
+          drag.previewRowMask = 0;
+          drag.previewColMask = 0;
+        }
+      }
     };
 
     const checkGameOverCondition = () => {
-      if (state.magneticSnaps.length > 0) return;
+      if (state.magneticSnaps.length > 0 || state.isStageCleared) return;
       if (!hasAnyValidMove(state.grid, state.tray)) {
         state.isGameOver = true;
         state.gameOverDelay = 0.75;
+        if (!isChallenge) {
+          clearStrategistSnapshot();
+        }
         soundEngine.playGameOver();
         triggerHaptic('gameOver');
         addFloatingText(
@@ -485,8 +812,9 @@ export default function StrategistEngine({
       let earnedPoints = placedCells * 10;
 
       if (clearedCount > 0) {
-        // Unlimited consecutive clear streak (x1, x2, ... x8, ... xN)
+        // Unlimited consecutive clear streak (x1, x2, ... x8, ... xN) + reset grace counter
         state.comboStreak += 1;
+        state.movesSinceLastClear = 0;
         const streak = state.comboStreak;
         state.maxCombo = Math.max(state.maxCombo, streak);
         state.linesCleared += clearedCount;
@@ -612,8 +940,16 @@ export default function StrategistEngine({
           overdriveScale: streak >= 8 ? Math.min(1.6, 1 + streak * 0.04) : 1,
         });
       } else {
-        // 0 rows/columns cleared -> reset consecutive streak
-        state.comboStreak = 0;
+        // Grace Window = 3: allow up to 2 non-clearing placements; reset comboStreak on the 3rd
+        if (state.comboStreak > 0) {
+          state.movesSinceLastClear += 1;
+          if (state.movesSinceLastClear >= GRACE_WINDOW) {
+            state.comboStreak = 0;
+            state.movesSinceLastClear = 0;
+          }
+        } else {
+          state.movesSinceLastClear = 0;
+        }
         soundEngine.playPlace();
         triggerHaptic('place');
       }
@@ -621,12 +957,56 @@ export default function StrategistEngine({
       state.score += earnedPoints;
       syncHud();
 
+      // Campaign Challenge immediate victory check (no timer)
+      if (isChallenge && !state.isStageCleared) {
+        const currentStats = {
+          score: state.score,
+          maxCombo: state.maxCombo,
+          linesCleared: state.linesCleared,
+        };
+        if (checkObjectivesCompleted(challengeStage, currentStats)) {
+          state.isStageCleared = true;
+          state.stageWinDelay = 0.35;
+          if (challengeStage.isBoss) {
+            soundEngine.playBossVictory();
+          } else {
+            soundEngine.playStageVictory();
+          }
+          triggerHaptic('multiClear');
+          addFloatingText(
+            state.layout.boardX + state.layout.boardSize / 2,
+            state.layout.boardY + state.layout.boardSize * 0.42,
+            challengeStage.isBoss ? 'HẠ BOSS!' : 'VƯỢT MÀN!',
+            '#fbbf24',
+            26
+          );
+          return;
+        }
+      }
+
       // Refill tray when all 3 slots are placed
       if (state.tray.every((slot) => slot === null) && state.magneticSnaps.length === 0) {
-        state.tray = generateTray(state.grid);
+        state.tray = isChallenge
+          ? generateSeededChallengeTray(trayRng, challengeStage.presetBlocks || 0)
+          : generateTray(state.grid);
       }
 
       checkGameOverCondition();
+
+      // Persist Endless 8×8 snapshot immediately after each valid move
+      if (!isChallenge && !state.isGameOver) {
+        saveStrategistSnapshot({
+          board: state.grid,
+          tray: state.tray,
+          score: state.score,
+          comboStreak: state.comboStreak,
+          movesSinceLastClear: state.movesSinceLastClear,
+          linesCleared: state.linesCleared,
+          maxCombo: state.maxCombo,
+          sessionId: sessionIdRef?.current || null,
+          savedAt: Date.now(),
+        });
+      }
     };
 
     const flushPendingSnaps = () => {
@@ -638,7 +1018,7 @@ export default function StrategistEngine({
 
     // Unified Pointer Events with setPointerCapture
     const handlePointerDown = (evt) => {
-      if (pausedRef.current || state.isGameOver) return;
+      if (pausedRef.current || state.isGameOver || state.isStageCleared) return;
       soundEngine.unlock();
 
       // Flush any in-flight 80ms snap so rapid players never wait
@@ -681,6 +1061,13 @@ export default function StrategistEngine({
         hoverRow: -1,
         hoverCol: -1,
         valid: false,
+        lastPreviewRow: null,
+        lastPreviewCol: null,
+        lastPreviewValid: false,
+        previewRows: [],
+        previewCols: [],
+        previewRowMask: 0,
+        previewColMask: 0,
       };
       updateDragHover(drag);
       state.dragging = drag;
@@ -863,6 +1250,18 @@ export default function StrategistEngine({
           if (ft.life <= 0) state.floatingTexts.splice(i, 1);
         }
 
+        if (state.isStageCleared && state.stageWinDelay > 0) {
+          state.stageWinDelay -= dt;
+          if (state.stageWinDelay <= 0) {
+            stageWinCallbackRef.current?.({
+              score: state.score,
+              maxCombo: state.maxCombo,
+              linesCleared: state.linesCleared,
+              piecesPlaced: state.piecesPlaced,
+            });
+          }
+        }
+
         if (state.isGameOver && state.gameOverDelay > 0) {
           state.gameOverDelay -= dt;
           if (state.gameOverDelay <= 0) {
@@ -911,42 +1310,62 @@ export default function StrategistEngine({
         }
       }
 
-      // Potential clear row/column preview highlight while hovering a valid move
-      let potentialClears = null;
-      if (state.dragging && state.dragging.valid && currentSettings.ghostPreview) {
-        potentialClears = findPotentialClears(
-          state.grid,
-          state.dragging.piece.matrix,
-          state.dragging.hoverRow,
-          state.dragging.hoverCol
-        );
+      // Predictive Clear Glow (cached on drag hover change — zero per-frame allocations)
+      const activeDrag =
+        state.dragging && state.dragging.valid && currentSettings.ghostPreview
+          ? state.dragging
+          : null;
+      const previewRowMask = activeDrag ? activeDrag.previewRowMask : 0;
+      const previewColMask = activeDrag ? activeDrag.previewColMask : 0;
+      const hasPredictedClears = previewRowMask !== 0 || previewColMask !== 0;
+      const clearGlowPulse = hasPredictedClears ? 0.5 + 0.5 * Math.sin(now * 0.012) : 0;
 
-        potentialClears.fullRows.forEach((r) => {
-          ctx.fillStyle = hexToRgba(state.dragging.piece.color, 0.16);
-          ctx.fillRect(boardX, boardY + r * cellSize, boardSize, cellSize);
-        });
-        potentialClears.fullCols.forEach((c) => {
-          ctx.fillStyle = hexToRgba(state.dragging.piece.color, 0.16);
-          ctx.fillRect(boardX + c * cellSize, boardY, cellSize, boardSize);
-        });
+      if (hasPredictedClears && activeDrag) {
+        const glowColor = activeDrag.piece.color;
+        const fillAlpha = 0.14 + clearGlowPulse * 0.14;
+        const strokeAlpha = 0.45 + clearGlowPulse * 0.4;
+
+        ctx.save();
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 10 + clearGlowPulse * 8;
+        ctx.fillStyle = hexToRgba(glowColor, fillAlpha);
+        ctx.strokeStyle = hexToRgba(glowColor, strokeAlpha);
+        ctx.lineWidth = 1.6;
+
+        for (let i = 0; i < activeDrag.previewRows.length; i += 1) {
+          const r = activeDrag.previewRows[i];
+          const ry = boardY + r * cellSize;
+          ctx.fillRect(boardX, ry, boardSize, cellSize);
+          ctx.strokeRect(boardX + 1, ry + 1, boardSize - 2, cellSize - 2);
+        }
+        for (let i = 0; i < activeDrag.previewCols.length; i += 1) {
+          const c = activeDrag.previewCols[i];
+          const cx = boardX + c * cellSize;
+          ctx.fillRect(cx, boardY, cellSize, boardSize);
+          ctx.strokeRect(cx + 1, boardY + 1, cellSize - 2, boardSize - 2);
+        }
+        ctx.restore();
       }
 
-      // 2. Draw Placed Blocks (with subtle placement impact pulse)
-      const pulseLookup = new Map();
-      state.impactPulses.forEach((ip) => {
-        pulseLookup.set(`${ip.r},${ip.c}`, ip);
-      });
-
+      // 2. Draw Placed Blocks (with subtle placement impact pulse; zero Map allocation)
+      const impactCount = state.impactPulses.length;
       for (let r = 0; r < GRID_SIZE; r += 1) {
+        const rowWillClear = (previewRowMask & (1 << r)) !== 0;
         for (let c = 0; c < GRID_SIZE; c += 1) {
           const color = state.grid[r][c];
           if (!color) continue;
-          const willClear =
-            potentialClears &&
-            (potentialClears.fullRows.has(r) || potentialClears.fullCols.has(c));
+          const willClear = rowWillClear || (previewColMask & (1 << c)) !== 0;
           const cx = boardX + c * cellSize;
           const cy = boardY + r * cellSize;
-          const pulse = pulseLookup.get(`${r},${c}`);
+
+          let pulse = null;
+          for (let ipIdx = 0; ipIdx < impactCount; ipIdx += 1) {
+            const ip = state.impactPulses[ipIdx];
+            if (ip.r === r && ip.c === c) {
+              pulse = ip;
+              break;
+            }
+          }
 
           if (pulse) {
             const t = Math.min(1, pulse.elapsed / pulse.duration);
@@ -964,10 +1383,16 @@ export default function StrategistEngine({
               cx,
               cy,
               cellSize,
-              willClear ? '#ffffff' : color,
+              willClear && activeDrag ? activeDrag.piece.color : color,
               skin,
-              willClear ? 0.92 : 1
+              willClear ? 0.88 + clearGlowPulse * 0.12 : 1
             );
+            if (willClear) {
+              ctx.save();
+              ctx.fillStyle = `rgba(255, 255, 255, ${0.14 + clearGlowPulse * 0.22})`;
+              ctx.fillRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
+              ctx.restore();
+            }
           }
         }
       }

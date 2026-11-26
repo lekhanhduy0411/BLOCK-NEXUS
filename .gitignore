@@ -11,6 +11,7 @@ client/.env
 # Production builds
 dist/
 client/dist/
+client/assets/logo-source.*
 
 # Logs & OS files
 *.log
