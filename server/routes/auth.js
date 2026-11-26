@@ -49,7 +49,7 @@ router.post('/register', async (req, res, next) => {
 
     // Migrate local Guest personal records if upgrading from a Guest session
     const migratedDragHigh = sanitizeNonNegativeInt(guestStats?.dragMode?.allTimeHigh);
-    const migratedDragCombo = sanitizeNonNegativeInt(guestStats?.dragMode?.maxCombo, 500);
+    const migratedDragCombo = sanitizeNonNegativeInt(guestStats?.dragMode?.maxCombo, 100_000);
     const migratedDropHigh = sanitizeNonNegativeInt(guestStats?.dropMode?.allTimeHigh);
     const migratedDropLines = sanitizeNonNegativeInt(guestStats?.dropMode?.maxLines, 100_000);
 

@@ -70,6 +70,33 @@ function easeOutCubic(t) {
   return 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 }
 
+/** Spring pop-in scale curve: 0.4 -> 1.3 -> 1.0 over first 34% of 950ms popup lifetime */
+function computeSpringPopupScale(progress) {
+  if (progress < 0.18) {
+    const t = easeOutCubic(progress / 0.18);
+    return 0.4 + (1.3 - 0.4) * t;
+  }
+  if (progress < 0.34) {
+    const t = easeOutCubic((progress - 0.18) / 0.16);
+    return 1.3 - (1.3 - 1.0) * t;
+  }
+  return 1.0;
+}
+
+function drawFourPointStar(ctx, x, y, outerR, innerR, rot = 0) {
+  ctx.beginPath();
+  for (let i = 0; i < 8; i += 1) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = rot + (i * Math.PI) / 4;
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 function pickWeightedShape(pool) {
   const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
   let r = Math.random() * totalWeight;
@@ -219,21 +246,26 @@ export default function StrategistEngine({
       grid: initialGrid,
       tray: generateTray(initialGrid),
       score: 0,
-      combo: 0,
+      comboStreak: 0, // Unlimited consecutive clear multiplier (x1, x2, ... x8, ... xN)
       maxCombo: 0,
       linesCleared: 0,
       piecesPlaced: 0,
       // Active Spring-Tracked Drag State
-      dragging: null, // { slotIndex, piece, pointerId, targetX, targetY, visualX, visualY, isTouch, scaleElapsed, hoverRow, hoverCol, valid }
+      dragging: null,
       // 80ms Magnetic Snap Glides in flight
-      magneticSnaps: [], // { piece, fromCenterX, fromCenterY, toRow, toCol, elapsed, duration }
+      magneticSnaps: [],
       // Placement Impact Pulse cells
-      impactPulses: [], // { r, c, color, elapsed, duration }
+      impactPulses: [],
       // Sequential 25ms Staggered Line Clear Cascade Waves
-      cascadeCells: [], // { r, c, color, delay, elapsed, triggered, flashDuration }
+      cascadeCells: [],
+      // Expanding radial shockwave rings (x4–x7 single, x8+ double)
+      shockwaves: [],
+      // Rich spring-animated combo multiplier popups (x{comboStreak} + +{earnedPoints})
+      comboPopups: [],
       particles: [],
       floatingTexts: [],
       shakeTime: 0,
+      shakeDuration: 0.22,
       shakeMagnitude: 0,
       isGameOver: false,
       gameOverDelay: 0,
@@ -254,7 +286,7 @@ export default function StrategistEngine({
     const syncHud = () => {
       hudCallbackRef.current?.({
         score: state.score,
-        combo: state.combo,
+        combo: state.comboStreak,
         maxCombo: state.maxCombo,
         linesCleared: state.linesCleared,
       });
@@ -311,21 +343,39 @@ export default function StrategistEngine({
     const resizeObserver = new ResizeObserver(computeLayout);
     resizeObserver.observe(container);
 
-    const spawnParticles = (cx, cy, color, count = 10) => {
+    const spawnParticles = (cx, cy, color, count = 10, { starMode = false } = {}) => {
       for (let i = 0; i < count; i += 1) {
-        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.6;
-        const speed = 80 + Math.random() * 195;
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.65;
+        const speed = (starMode ? 110 : 80) + Math.random() * (starMode ? 240 : 195);
         state.particles.push({
           x: cx,
           y: cy,
           vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 35,
-          size: 3 + Math.random() * 4.5,
-          color,
-          life: 0.42 + Math.random() * 0.32,
-          maxLife: 0.74,
+          vy: Math.sin(angle) * speed - (starMode ? 55 : 35),
+          size: starMode ? 4.5 + Math.random() * 5 : 3 + Math.random() * 4.5,
+          color: starMode
+            ? `hsl(${Math.floor(Math.random() * 360)}, 100%, 68%)`
+            : color,
+          shape: starMode && i % 2 === 0 ? 'star' : 'square',
+          rot: Math.random() * Math.PI,
+          vRot: (Math.random() - 0.5) * 8,
+          life: (starMode ? 0.52 : 0.42) + Math.random() * 0.34,
+          maxLife: starMode ? 0.86 : 0.74,
         });
       }
+    };
+
+    const spawnShockwave = (x, y, maxRadius, color, lineWidth = 3.5, delay = 0) => {
+      state.shockwaves.push({
+        x,
+        y,
+        maxRadius,
+        color,
+        lineWidth,
+        delay,
+        elapsed: 0,
+        duration: 0.52,
+      });
     };
 
     const addFloatingText = (x, y, text, color = '#00f3ff', size = 22) => {
@@ -432,19 +482,23 @@ export default function StrategistEngine({
       }
 
       const clearedCount = fullRows.length + fullCols.length;
-      let gainedPoints = placedCells * 10;
+      let earnedPoints = placedCells * 10;
 
       if (clearedCount > 0) {
-        state.combo += 1;
-        state.maxCombo = Math.max(state.maxCombo, state.combo);
+        // Unlimited consecutive clear streak (x1, x2, ... x8, ... xN)
+        state.comboStreak += 1;
+        const streak = state.comboStreak;
+        state.maxCombo = Math.max(state.maxCombo, streak);
         state.linesCleared += clearedCount;
 
-        const multiBonus = clearedCount > 1 ? clearedCount * 60 : 0;
-        const linePoints = (clearedCount * 100 + multiBonus) * state.combo;
-        gainedPoints += linePoints;
+        // Exact dynamic multiplier formula: (placedCells * 10) + (clearedLinesOrCols * 100 * comboStreak)
+        earnedPoints = placedCells * 10 + clearedCount * 100 * streak;
 
         // Build sequential cell-by-cell cascade map (25ms stagger across columns/rows)
         const cascadeMap = new Map();
+        const isOverdrive = streak >= 8;
+        const particleCountPerCell = streak >= 8 ? 11 : streak >= 4 ? 9 : streak >= 2 ? 8 : 6;
+
         fullRows.forEach((r) => {
           for (let c = 0; c < GRID_SIZE; c += 1) {
             const key = `${r},${c}`;
@@ -458,6 +512,8 @@ export default function StrategistEngine({
                 elapsed: 0,
                 triggered: false,
                 flashDuration: 0.22,
+                particleCount: particleCountPerCell,
+                starMode: isOverdrive,
               });
             }
           }
@@ -475,59 +531,94 @@ export default function StrategistEngine({
                 elapsed: 0,
                 triggered: false,
                 flashDuration: 0.22,
+                particleCount: particleCountPerCell,
+                starMode: isOverdrive,
               });
             }
           }
         });
 
+        // Compute geometric center of cleared row(s)/column(s) for floating popup & shockwaves
+        let sumX = 0;
+        let sumY = 0;
         cascadeMap.forEach((entry) => {
+          sumX += boardX + (entry.c + 0.5) * cellSize;
+          sumY += boardY + (entry.r + 0.5) * cellSize;
           state.cascadeCells.push(entry);
           state.grid[entry.r][entry.c] = null;
         });
 
+        const clearCenterX = Math.max(
+          boardX + 68,
+          Math.min(boardX + state.layout.boardSize - 68, sumX / Math.max(1, cascadeMap.size))
+        );
+        const clearCenterY = Math.max(
+          boardY + 58,
+          Math.min(boardY + state.layout.boardSize - 42, sumY / Math.max(1, cascadeMap.size))
+        );
+
         // Perfect Full Board Clear Bonus
         const boardEmpty = state.grid.every((row) => row.every((cell) => cell === null));
         if (boardEmpty) {
-          gainedPoints += 1000;
+          earnedPoints += 1000;
           addFloatingText(
             boardX + state.layout.boardSize / 2,
-            boardY + state.layout.boardSize * 0.38,
-            'XÓA SẠCH BẢNG +1000',
+            boardY + state.layout.boardSize * 0.24,
+            'XÓA SẠCH BẢNG +1,000',
             '#f59e0b',
-            22
+            20
           );
         }
 
-        soundEngine.playLineClear(state.combo, clearedCount);
-        triggerHaptic(clearedCount >= 2 ? 'multiClear' : 'clear');
+        // Audio pitch escalation (1 semitone per comboStreak step)
+        soundEngine.playLineClear(streak, clearedCount);
+        triggerHaptic(streak >= 3 || clearedCount >= 2 ? 'multiClear' : 'clear');
 
-        if (clearedCount >= 2 || state.combo >= 3) {
-          state.shakeTime = 0.22;
-          state.shakeMagnitude = Math.min(8, 3.5 + clearedCount * 2);
+        // Tiered visual impact FX (Unlimited Scaling)
+        if (streak === 2) {
+          // x2 Electric Purple burst particles at center
+          spawnParticles(clearCenterX, clearCenterY, '#bc13fe', 16);
+        } else if (streak === 3) {
+          // x3 Amber Gold + 3px micro board shake
+          state.shakeTime = 0.2;
+          state.shakeDuration = 0.2;
+          state.shakeMagnitude = 3;
+          spawnParticles(clearCenterX, clearCenterY, '#f59e0b', 20);
+        } else if (streak >= 4 && streak <= 7) {
+          // x4–x7 Blazing Crimson-Gold + expanding radial shockwave + 5px board shake
+          state.shakeTime = 0.24;
+          state.shakeDuration = 0.24;
+          state.shakeMagnitude = 5;
+          spawnShockwave(clearCenterX, clearCenterY, state.layout.boardSize * 0.58, '#ff2a5f', 4);
+          spawnParticles(clearCenterX, clearCenterY, '#fbbf24', 24);
+        } else if (streak >= 8) {
+          // x8+ Overdrive: double shockwave rings + dense star-spark explosion + board shake
+          state.shakeTime = 0.28;
+          state.shakeDuration = 0.28;
+          state.shakeMagnitude = 6;
+          spawnShockwave(clearCenterX, clearCenterY, state.layout.boardSize * 0.72, '#00f3ff', 4.5, 0);
+          spawnShockwave(clearCenterX, clearCenterY, state.layout.boardSize * 0.56, '#fbbf24', 3.5, 0.09);
+          spawnParticles(clearCenterX, clearCenterY, '#ffffff', 32, { starMode: true });
         }
 
-        const centerX = boardX + (toCol + matrix[0].length / 2) * cellSize;
-        const centerY = boardY + (toRow + matrix.length / 2) * cellSize;
-        const label =
-          state.combo > 1
-            ? `CHUỖI x${state.combo} +${gainedPoints}`
-            : clearedCount > 1
-              ? `XÓA x${clearedCount} +${gainedPoints}`
-              : `+${gainedPoints}`;
-        addFloatingText(
-          Math.max(boardX + 70, Math.min(boardX + state.layout.boardSize - 70, centerX)),
-          Math.max(boardY + 40, centerY),
-          label,
-          state.combo > 1 ? '#f59e0b' : '#00f3ff',
-          state.combo > 1 || clearedCount > 1 ? 22 : 18
-        );
+        // Spawn animated floating multiplier badge rising 50px over 950ms
+        state.comboPopups.push({
+          x: clearCenterX,
+          startY: clearCenterY,
+          streak,
+          points: earnedPoints,
+          elapsed: 0,
+          duration: 0.95,
+          overdriveScale: streak >= 8 ? Math.min(1.6, 1 + streak * 0.04) : 1,
+        });
       } else {
-        state.combo = 0;
+        // 0 rows/columns cleared -> reset consecutive streak
+        state.comboStreak = 0;
         soundEngine.playPlace();
         triggerHaptic('place');
       }
 
-      state.score += gainedPoints;
+      state.score += earnedPoints;
       syncHud();
 
       // Refill tray when all 3 slots are placed
@@ -726,11 +817,30 @@ export default function StrategistEngine({
               boardX + (cell.c + 0.5) * cellSize,
               boardY + (cell.r + 0.5) * cellSize,
               cell.color,
-              7
+              cell.particleCount || 7,
+              { starMode: Boolean(cell.starMode) }
             );
           }
           if (cell.elapsed >= cell.delay + cell.flashDuration) {
             state.cascadeCells.splice(i, 1);
+          }
+        }
+
+        // Update Expanding Radial Shockwave Rings
+        for (let i = state.shockwaves.length - 1; i >= 0; i -= 1) {
+          const sw = state.shockwaves[i];
+          sw.elapsed += dt;
+          if (sw.elapsed >= sw.delay + sw.duration) {
+            state.shockwaves.splice(i, 1);
+          }
+        }
+
+        // Update Floating Multiplier Popups (950ms lifetime)
+        for (let i = state.comboPopups.length - 1; i >= 0; i -= 1) {
+          const cp = state.comboPopups[i];
+          cp.elapsed += dt;
+          if (cp.elapsed >= cp.duration) {
+            state.comboPopups.splice(i, 1);
           }
         }
 
@@ -740,6 +850,7 @@ export default function StrategistEngine({
           p.x += p.vx * dt;
           p.y += p.vy * dt;
           p.vy += 430 * dt;
+          if (p.vRot) p.rot += p.vRot * dt;
           p.life -= dt;
           if (p.life <= 0) state.particles.splice(i, 1);
         }
@@ -771,7 +882,7 @@ export default function StrategistEngine({
 
       ctx.save();
       if (state.shakeTime > 0) {
-        const intensity = (state.shakeTime / 0.22) * state.shakeMagnitude;
+        const intensity = (state.shakeTime / Math.max(0.01, state.shakeDuration)) * state.shakeMagnitude;
         ctx.translate(
           (Math.random() - 0.5) * intensity * 2,
           (Math.random() - 0.5) * intensity * 2
@@ -1026,19 +1137,119 @@ export default function StrategistEngine({
         ctx.restore();
       }
 
-      // 8. Particles
+      // 8. Expanding Radial Shockwave Rings (x4–x7 single, x8+ double)
+      state.shockwaves.forEach((sw) => {
+        if (sw.elapsed < sw.delay) return;
+        const t = Math.min(1, (sw.elapsed - sw.delay) / sw.duration);
+        const eased = easeOutCubic(t);
+        const radius = 12 + (sw.maxRadius - 12) * eased;
+        const alpha = Math.max(0, (1 - t) * 0.9);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = sw.color;
+        ctx.lineWidth = Math.max(1, sw.lineWidth * (1 - t * 0.65));
+        ctx.shadowColor = sw.color;
+        ctx.shadowBlur = 16;
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // 9. Particles (squares + 4-point star-sparks for x8+ Overdrive)
       state.particles.forEach((p) => {
         const alpha = Math.max(0, p.life / p.maxLife);
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.fillStyle = p.color;
         ctx.shadowColor = p.color;
-        ctx.shadowBlur = 8;
-        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        ctx.shadowBlur = p.shape === 'star' ? 12 : 8;
+        if (p.shape === 'star') {
+          drawFourPointStar(ctx, p.x, p.y, p.size * 1.15, p.size * 0.35, p.rot || 0);
+        } else {
+          ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        }
         ctx.restore();
       });
 
-      // 9. Floating Popups
+      // 10. Unlimited Multiplier Popups (x{comboStreak} + +{earnedPoints}, 50px rise over 950ms)
+      state.comboPopups.forEach((cp) => {
+        const p = Math.min(1, cp.elapsed / cp.duration);
+        const riseY = cp.startY - 50 * easeOutCubic(p);
+        const springScale = computeSpringPopupScale(p) * cp.overdriveScale;
+        const alpha = p < 0.65 ? 1 : Math.max(0, 1 - (p - 0.65) / 0.35);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(cp.x, riseY);
+        ctx.scale(springScale, springScale);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const multText = `x${cp.streak}`;
+        const ptsText = `+${cp.points.toLocaleString()}`;
+        const multFontSize = cp.streak >= 8 ? 34 : cp.streak >= 4 ? 30 : cp.streak >= 2 ? 27 : 24;
+
+        ctx.font = `900 ${multFontSize}px "JetBrains Mono", "Outfit", sans-serif`;
+
+        // Tiered Dynamic Fill & Glow
+        let glowColor = '#00f3ff';
+        let fillStyle = '#00f3ff';
+        let strokeColor = '#04121f';
+
+        if (cp.streak === 1) {
+          glowColor = '#00f3ff';
+          fillStyle = '#67f8ff';
+        } else if (cp.streak === 2) {
+          glowColor = '#bc13fe';
+          fillStyle = '#e879f9';
+        } else if (cp.streak === 3) {
+          glowColor = '#f59e0b';
+          fillStyle = '#fde047';
+        } else if (cp.streak >= 4 && cp.streak <= 7) {
+          glowColor = '#ff2a5f';
+          const grad = ctx.createLinearGradient(-44, -18, 44, 18);
+          grad.addColorStop(0, '#ff2a5f');
+          grad.addColorStop(0.55, '#fb923c');
+          grad.addColorStop(1, '#fbbf24');
+          fillStyle = grad;
+        } else {
+          // x8+ Overdrive: animated iridescent rainbow / hyper-nova color-cycling gradient
+          const hue = (now * 0.38) % 360;
+          glowColor = `hsl(${hue}, 100%, 62%)`;
+          const rainbow = ctx.createLinearGradient(-56, -20, 56, 20);
+          rainbow.addColorStop(0, `hsl(${hue}, 100%, 68%)`);
+          rainbow.addColorStop(0.33, `hsl(${(hue + 95) % 360}, 100%, 68%)`);
+          rainbow.addColorStop(0.66, `hsl(${(hue + 195) % 360}, 100%, 68%)`);
+          rainbow.addColorStop(1, `hsl(${(hue + 290) % 360}, 100%, 72%)`);
+          fillStyle = rainbow;
+        }
+
+        // Crisp dark outline + vivid neon glow for high readability
+        ctx.lineWidth = 5;
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = strokeColor;
+        ctx.strokeText(multText, 0, -9);
+
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = cp.streak >= 8 ? 22 : cp.streak >= 4 ? 18 : 14;
+        ctx.fillStyle = fillStyle;
+        ctx.fillText(multText, 0, -9);
+
+        // Earned points sub-label (+{earnedPoints})
+        ctx.shadowBlur = 10;
+        ctx.font = `800 15px "JetBrains Mono", "Outfit", sans-serif`;
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = 'rgba(4, 7, 18, 0.9)';
+        ctx.strokeText(ptsText, 0, 16);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(ptsText, 0, 16);
+
+        ctx.restore();
+      });
+
+      // 11. General Floating Notices (Perfect Clear / Game Over)
       state.floatingTexts.forEach((ft) => {
         const alpha = Math.min(1, ft.life / (ft.maxLife * 0.55));
         ctx.save();

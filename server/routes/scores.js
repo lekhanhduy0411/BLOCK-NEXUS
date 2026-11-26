@@ -21,7 +21,7 @@ router.post('/submit', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid score value.' });
     }
 
-    const combo = Math.max(0, Math.min(500, Math.floor(Number(req.body?.maxCombo || 0))));
+    const combo = Math.max(0, Math.min(100_000, Math.floor(Number(req.body?.maxCombo || 0))));
     const lines = Math.max(0, Math.min(100_000, Math.floor(Number(req.body?.linesCleared || 0))));
 
     const prevModeRecord = req.user.records?.[mode] || {

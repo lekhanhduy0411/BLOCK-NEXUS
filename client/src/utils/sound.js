@@ -150,9 +150,10 @@ class SoundEngine {
   }
 
   playLineClear(combo = 1, linesCount = 1) {
-    // Escalate pitch per combo (pentatonic / semitone climb)
-    const semitoneBoost = Math.min(Math.max(0, combo - 1), 10) * 1.5;
-    const baseRatio = Math.pow(2, semitoneBoost / 12);
+    // Continuous 1-semitone pitch escalation per comboStreak (capped safely at +24 semitones / 2 octaves)
+    const step = Math.min(Math.max(0, combo - 1), 24);
+    const pitchRatio = Math.pow(1.059463, step);
+
     const notes =
       linesCount >= 4
         ? [523.25, 659.25, 783.99, 1046.5, 1318.5]
@@ -161,18 +162,49 @@ class SoundEngine {
           : [440, 554.37, 659.25];
 
     notes.forEach((freq, idx) => {
+      const scaled = Math.min(3600, freq * pitchRatio);
       this.playTone({
-        freqStart: freq * baseRatio,
-        freqEnd: freq * baseRatio * 1.02,
+        freqStart: scaled,
+        freqEnd: Math.min(3900, scaled * 1.025),
         type: idx === notes.length - 1 ? 'triangle' : 'sine',
         duration: 0.18 + idx * 0.03,
         volume: 0.14,
-        delay: idx * 0.045,
+        delay: idx * 0.042,
       });
     });
 
+    // Extra shimmering harmonic sparkle at x4+ and Hyper-Nova chime at x8+
+    if (combo >= 4) {
+      const overtone = Math.min(4200, 880 * pitchRatio);
+      this.playTone({
+        freqStart: overtone,
+        freqEnd: Math.min(4600, overtone * 1.12),
+        type: 'triangle',
+        duration: 0.24,
+        volume: 0.11,
+        delay: 0.08,
+      });
+    }
+
+    if (combo >= 8) {
+      const hyperFreq = Math.min(4800, 1318.5 * Math.pow(1.059463, Math.min(step, 18)));
+      this.playTone({
+        freqStart: hyperFreq,
+        freqEnd: Math.min(5200, hyperFreq * 1.25),
+        type: 'sine',
+        duration: 0.3,
+        volume: 0.12,
+        delay: 0.12,
+      });
+    }
+
     if (linesCount >= 2 || combo >= 2) {
-      this.playNoiseBurst({ duration: 0.1, volume: 0.07, filterFreq: 2400, delay: 0.03 });
+      this.playNoiseBurst({
+        duration: combo >= 8 ? 0.14 : 0.1,
+        volume: combo >= 4 ? 0.085 : 0.065,
+        filterFreq: Math.min(5000, 2200 + step * 110),
+        delay: 0.03,
+      });
     }
   }
 

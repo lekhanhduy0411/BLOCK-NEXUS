@@ -51,40 +51,40 @@ export default function HomeScreen({
     : [];
 
   return (
-    <div className="min-h-dvh w-full flex flex-col justify-between px-4 sm:px-6 py-4 sm:py-6 relative overflow-x-hidden animate-screen-in">
+    <div className="min-h-dvh w-full flex flex-col justify-center px-4 sm:px-6 py-4 relative overflow-x-hidden animate-screen-in">
       <GameBackdrop bgId={activeTheme.id} isPreview={false} />
       <div className="hud-cockpit-overlay" />
 
-      <div className="w-full max-w-5xl mx-auto flex flex-col gap-5 sm:gap-6 relative z-10 flex-1">
-        {/* Thanh tài khoản & nút chức năng */}
+      <div className="w-full max-w-7xl mx-auto flex flex-col gap-4 relative z-10">
+        {/* 1. Thanh tài khoản, ví Xu & nút chức năng nổi bật */}
         <header className="hud-drop">
           <div className="hud-panel px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
-            {/* Thông tin tài khoản */}
+            {/* Thông tin người chơi */}
             <div className="flex items-center gap-3.5 min-w-0">
-              <div className="relative w-12 h-12 shrink-0 hud-panel-sm flex items-center justify-center border border-cyan-400/45 bg-[#081022]">
-                <span className="font-mono font-extrabold text-sm text-[#00f3ff]">
+              <div className="relative w-13 h-13 shrink-0 hud-panel-sm flex items-center justify-center border border-cyan-400/50 bg-[#081022]">
+                <span className="font-mono font-black text-base text-[#00f3ff]">
                   {avatarInitials}
                 </span>
                 <span
-                  className={`absolute bottom-1 right-1 w-2 h-2 ${
+                  className={`absolute bottom-1 right-1 w-2.5 h-2.5 ${
                     isGuest ? 'bg-amber-400' : 'bg-emerald-400'
                   }`}
                 />
               </div>
 
               <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-base text-white truncate max-w-[160px] sm:max-w-[220px]">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-lg sm:text-xl font-extrabold text-white truncate max-w-[180px] sm:max-w-[260px]">
                     {displayName}
                   </span>
 
                   {isGuest ? (
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-amber-500/15 border border-amber-400/45 text-amber-300">
+                    <span className="text-xs font-extrabold px-2.5 py-0.5 bg-amber-500/20 border border-amber-400/55 text-amber-300">
                       Khách
                     </span>
                   ) : isAdmin ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-amber-400/20 border border-amber-400/70 text-amber-200">
-                      <FounderCrownIcon className="w-3.5 h-3.5" />
+                    <span className="inline-flex items-center gap-1 text-xs font-extrabold px-2.5 py-0.5 bg-amber-400/20 border border-amber-400/75 text-amber-200">
+                      <FounderCrownIcon className="w-4 h-4" />
                       Quản trị
                     </span>
                   ) : null}
@@ -98,30 +98,27 @@ export default function HomeScreen({
                       soundEngine.playButtonClick();
                       onOpenRegister();
                     }}
-                    className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-[#00f3ff] hover:text-cyan-200 transition-colors cursor-pointer"
+                    className="mt-1 inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#00f3ff] hover:text-cyan-200 transition-colors cursor-pointer"
                   >
-                    <UserPlus className="w-3.5 h-3.5" />
+                    <UserPlus className="w-4 h-4" />
                     Đăng ký để vào BXH & tích Xu
                   </button>
                 ) : (
-                  <div className="mt-0.5 text-xs text-slate-400 truncate">
-                    Nền: <span className="text-slate-200">{activeTheme.name}</span>
+                  <div className="mt-0.5 text-xs sm:text-sm text-slate-300 truncate">
+                    Nền: <span className="font-semibold text-white">{activeTheme.name}</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Ví Xu & Nút thao tác */}
-            <div className="flex items-center gap-2 ml-auto flex-wrap">
+            {/* Ví Xu nổi bật & các nút bấm lớn dễ thao tác */}
+            <div className="flex items-center gap-2.5 ml-auto flex-wrap">
               {!isGuest && (
-                <div className="hud-panel-sm px-3 py-1.5 flex items-center gap-2 border border-amber-400/40 bg-[#141008]/90">
-                  <NexusCoinIcon className="w-5 h-5 shrink-0" />
-                  <div className="leading-none">
-                    <div className="text-[10px] text-amber-300/80">Số dư</div>
-                    <div className="font-mono font-extrabold text-sm text-amber-200 tabular-nums mt-0.5">
-                      {(currentUser?.coins ?? 0).toLocaleString()} Xu
-                    </div>
-                  </div>
+                <div className="px-4 py-2 rounded-full flex items-center gap-2 border border-amber-400/65 bg-amber-500/15 shadow-[0_0_16px_rgba(245,158,11,0.22)]">
+                  <NexusCoinIcon className="w-6 h-6 shrink-0" />
+                  <span className="font-mono font-black text-lg sm:text-xl text-amber-300 tabular-nums leading-none whitespace-nowrap">
+                    {(currentUser?.coins ?? 0).toLocaleString()} Xu
+                  </span>
                 </div>
               )}
 
@@ -133,9 +130,9 @@ export default function HomeScreen({
                     soundEngine.playButtonClick();
                     onOpenAdmin();
                   }}
-                  className="btn-arcade btn-arcade-amber px-3 py-2 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                  className="btn-arcade btn-arcade-amber px-4 py-2.5 text-sm sm:text-base font-extrabold flex items-center gap-2 cursor-pointer"
                 >
-                  <FounderCrownIcon className="w-4 h-4" />
+                  <FounderCrownIcon className="w-5 h-5" />
                   <span>Quản trị</span>
                 </button>
               )}
@@ -147,9 +144,9 @@ export default function HomeScreen({
                   soundEngine.playButtonClick();
                   onOpenShop();
                 }}
-                className="btn-arcade btn-arcade-slate px-3 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                className="btn-arcade btn-arcade-slate px-4 py-2.5 text-sm sm:text-base font-extrabold flex items-center gap-2 cursor-pointer"
               >
-                <ShopCoreIcon className="w-4 h-4" />
+                <ShopCoreIcon className="w-5 h-5" />
                 <span>Cửa hàng</span>
               </button>
 
@@ -160,9 +157,9 @@ export default function HomeScreen({
                   soundEngine.playButtonClick();
                   onOpenLeaderboard('dragMode');
                 }}
-                className="btn-arcade btn-arcade-slate px-3 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                className="btn-arcade btn-arcade-slate px-4 py-2.5 text-sm sm:text-base font-extrabold flex items-center gap-2 cursor-pointer"
               >
-                <TrophyHexIcon className="w-4 h-4" />
+                <TrophyHexIcon className="w-5 h-5" />
                 <span>Xếp hạng</span>
               </button>
 
@@ -173,11 +170,12 @@ export default function HomeScreen({
                   soundEngine.playButtonClick();
                   onOpenSettings();
                 }}
-                className="btn-arcade btn-arcade-slate w-10 h-9 flex items-center justify-center cursor-pointer"
+                className="btn-arcade btn-arcade-slate px-3.5 py-2.5 text-sm sm:text-base font-extrabold flex items-center gap-1.5 cursor-pointer"
                 title="Cài đặt"
                 aria-label="Cài đặt"
               >
                 <GearHexIcon className="w-5 h-5" />
+                <span className="hidden xl:inline">Cài đặt</span>
               </button>
 
               {!isGuest && (
@@ -187,11 +185,11 @@ export default function HomeScreen({
                     soundEngine.playButtonClick();
                     onLogout();
                   }}
-                  className="btn-arcade btn-arcade-slate w-10 h-9 flex items-center justify-center text-rose-300 cursor-pointer"
+                  className="btn-arcade btn-arcade-slate w-11 h-11 flex items-center justify-center text-rose-300 cursor-pointer"
                   title="Đăng xuất"
                   aria-label="Đăng xuất"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-5 h-5" />
                 </button>
               )}
             </div>
@@ -201,16 +199,16 @@ export default function HomeScreen({
         {/* Thông báo nhận thưởng Top 3 tuần */}
         {unclaimedRewards.length > 0 && (
           <div className="hud-drop">
-            <div className="hud-panel-amber px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="hud-panel-amber px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <TrophyHexIcon className="w-9 h-9 shrink-0" />
+                <TrophyHexIcon className="w-10 h-10 shrink-0" />
                 <div>
-                  <div className="text-xs text-amber-300 font-semibold">
+                  <div className="text-xs sm:text-sm text-amber-300 font-bold">
                     Thưởng Bảng Xếp Hạng tuần {unclaimedRewards[0].weekLabel}
                   </div>
-                  <div className="text-sm font-bold text-white">
+                  <div className="text-sm sm:text-base font-extrabold text-white">
                     Chúc mừng hạng #{unclaimedRewards[0].rank} — Đã cộng{' '}
-                    <span className="font-mono font-extrabold text-amber-300 tabular-nums">
+                    <span className="font-mono font-black text-amber-300 tabular-nums">
                       +{unclaimedRewards.reduce((sum, r) => sum + r.coinsAwarded, 0).toLocaleString()} Xu
                     </span>
                   </div>
@@ -222,7 +220,7 @@ export default function HomeScreen({
                   soundEngine.playCoinPurchase();
                   onClaimRewards();
                 }}
-                className="btn-arcade btn-arcade-amber px-4 py-2 text-xs font-extrabold cursor-pointer"
+                className="btn-arcade btn-arcade-amber px-5 py-2.5 text-sm font-black cursor-pointer"
               >
                 Xác nhận
               </button>
@@ -230,23 +228,25 @@ export default function HomeScreen({
           </div>
         )}
 
-        {/* Tiêu đề chính gọn gàng */}
-        <section className="flex items-center gap-3.5 px-1 pt-1">
-          <NexusLogoMark className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-none">
-              BLOCK <span className="text-[#00f3ff]">NEXUS</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Chọn chế độ chơi để bắt đầu
-            </p>
+        {/* 2. Khối tiêu đề tích hợp gọn sát phía trên 2 thẻ chế độ */}
+        <section className="flex flex-wrap items-center justify-between gap-3 px-1 mt-0.5">
+          <div className="flex items-center gap-3.5">
+            <NexusLogoMark className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white leading-none">
+                BLOCK <span className="text-[#00f3ff]">NEXUS</span>
+              </h1>
+              <p className="text-sm text-slate-300 font-medium mt-1">
+                Chọn chế độ xếp khối để bắt đầu ngay
+              </p>
+            </div>
           </div>
         </section>
 
-        {/* 2 Thẻ chọn chế độ chơi */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-5 flex-1 items-stretch">
-          {/* Chế độ 8x8 */}
-          <div className="hud-drop flex">
+        {/* 3. Hai thẻ chọn chế độ ôm gọn nội dung (không khoảng trống thừa) */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Chế độ 8×8 */}
+          <div className="hud-drop">
             <div
               onClick={() => {
                 soundEngine.unlock();
@@ -258,7 +258,7 @@ export default function HomeScreen({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') onStartGame('dragMode');
               }}
-              className="group cartridge-card hud-panel flex-1 p-5 sm:p-6 flex flex-col justify-between gap-5 cursor-pointer transition-[box-shadow] duration-200 hover:shadow-[inset_0_0_0_1px_rgba(0,243,255,0.72),inset_0_1px_0_rgba(255,255,255,0.2)]"
+              className="group cartridge-card hud-panel p-5 flex flex-col gap-4 cursor-pointer transition-[box-shadow] duration-200 hover:shadow-[inset_0_0_0_1px_rgba(0,243,255,0.75),inset_0_1px_0_rgba(255,255,255,0.22)]"
             >
               <div
                 className="cartridge-scan-beam"
@@ -268,52 +268,59 @@ export default function HomeScreen({
                 }}
               />
 
-              <div>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                      Chiến Thuật 8×8
-                    </h2>
-                    <p className="text-xs sm:text-sm text-slate-300/90 mt-1.5 leading-relaxed">
-                      Kéo thả khối trên lưới 8×8, xóa hàng ngang và dọc đồng thời để nhân chuỗi điểm.
-                    </p>
-                  </div>
-                  <ModeDragIcon className="w-16 h-16 shrink-0 transition-transform duration-200 group-hover:-translate-y-0.5" />
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    Chiến Thuật 8×8
+                  </h2>
+                  <p className="text-sm text-slate-300 mt-1 leading-snug">
+                    Kéo thả khối trên lưới 8×8, xóa hàng ngang và dọc liên tiếp để nhân chuỗi điểm không giới hạn.
+                  </p>
                 </div>
+                <ModeDragIcon className="w-14 h-14 shrink-0 transition-transform duration-200 group-hover:-translate-y-0.5" />
+              </div>
 
-                <div className="grid grid-cols-3 gap-2.5 mt-5">
-                  <div className="hud-panel-sm p-3">
-                    <div className="text-[11px] text-slate-400">Kỷ lục</div>
-                    <div className="font-mono font-extrabold text-base sm:text-lg text-white tabular-nums mt-1">
-                      {(dragStats.allTimeHigh || 0).toLocaleString()}
-                    </div>
+              {/* 3 ô thông số lớn, đậm, rõ nét */}
+              <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+                <div className="hud-panel-sm px-3.5 py-3">
+                  <div className="text-xs sm:text-sm font-bold text-slate-300">Kỷ lục</div>
+                  <div className="font-mono font-black text-2xl sm:text-3xl text-white tabular-nums mt-1 leading-none">
+                    {(dragStats.allTimeHigh || 0).toLocaleString()}
                   </div>
-                  <div className="hud-panel-sm p-3">
-                    <div className="text-[11px] text-slate-400">Điểm tuần</div>
-                    <div className="font-mono font-extrabold text-base sm:text-lg text-[#00f3ff] tabular-nums mt-1">
-                      {isGuest ? '—' : (dragStats.weeklyScore || 0).toLocaleString()}
-                    </div>
+                </div>
+                <div className="hud-panel-sm px-3.5 py-3">
+                  <div className="text-xs sm:text-sm font-bold text-slate-300">Điểm tuần</div>
+                  <div className="font-mono font-black text-2xl sm:text-3xl text-cyan-300 tabular-nums mt-1 leading-none">
+                    {isGuest ? '—' : (dragStats.weeklyScore || 0).toLocaleString()}
                   </div>
-                  <div className="hud-panel-sm p-3">
-                    <div className="text-[11px] text-slate-400">Chuỗi tối đa</div>
-                    <div className="font-mono font-extrabold text-base sm:text-lg text-amber-300 tabular-nums mt-1">
-                      x{dragStats.maxCombo || 0}
-                    </div>
+                </div>
+                <div className="hud-panel-sm px-3.5 py-3">
+                  <div className="text-xs sm:text-sm font-bold text-slate-300">Chuỗi tối đa</div>
+                  <div className="font-mono font-black text-2xl sm:text-3xl text-amber-400 tabular-nums mt-1 leading-none">
+                    x{dragStats.maxCombo || 0}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end pt-2 border-t border-white/8">
-                <span className="btn-arcade btn-arcade-cyan px-5 py-2.5 text-xs sm:text-sm font-extrabold inline-flex items-center gap-2">
-                  <PlayTriIcon className="w-3.5 h-3.5" />
-                  Chơi 8×8
-                </span>
-              </div>
+              {/* Nút chơi toàn chiều rộng đặt sát ngay dưới ô thông số */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  soundEngine.unlock();
+                  soundEngine.playButtonClick();
+                  onStartGame('dragMode');
+                }}
+                className="btn-arcade btn-arcade-cyan w-full py-3.5 text-base sm:text-lg font-black uppercase tracking-wider inline-flex items-center justify-center gap-2.5 cursor-pointer"
+              >
+                <PlayTriIcon className="w-4 h-4" />
+                Chơi 8×8
+              </button>
             </div>
           </div>
 
-          {/* Chế độ 10x20 */}
-          <div className="hud-drop flex">
+          {/* Chế độ 10×20 */}
+          <div className="hud-drop">
             <div
               onClick={() => {
                 soundEngine.unlock();
@@ -325,7 +332,7 @@ export default function HomeScreen({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') onStartGame('dropMode');
               }}
-              className="group cartridge-card hud-panel-purple flex-1 p-5 sm:p-6 flex flex-col justify-between gap-5 cursor-pointer transition-[box-shadow] duration-200 hover:shadow-[inset_0_0_0_1px_rgba(188,19,254,0.78),inset_0_1px_0_rgba(255,255,255,0.2)]"
+              className="group cartridge-card hud-panel-purple p-5 flex flex-col gap-4 cursor-pointer transition-[box-shadow] duration-200 hover:shadow-[inset_0_0_0_1px_rgba(188,19,254,0.8),inset_0_1px_0_rgba(255,255,255,0.22)]"
             >
               <div
                 className="cartridge-scan-beam"
@@ -335,70 +342,77 @@ export default function HomeScreen({
                 }}
               />
 
-              <div>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                      Tốc Độ 10×20
-                    </h2>
-                    <p className="text-xs sm:text-sm text-slate-300/90 mt-1.5 leading-relaxed">
-                      Xếp khối rơi cổ điển trên lưới 10×20, di chuyển, xoay khối và thả nhanh đồng bộ giữa điện thoại và máy tính.
-                    </p>
-                  </div>
-                  <ModeDropIcon className="w-16 h-16 shrink-0 transition-transform duration-200 group-hover:-translate-y-0.5" />
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    Tốc Độ 10×20
+                  </h2>
+                  <p className="text-sm text-slate-300 mt-1 leading-snug">
+                    Xếp khối rơi cổ điển trên lưới 10×20, di chuyển, xoay khối và thả nhanh đồng bộ trên mọi thiết bị.
+                  </p>
                 </div>
+                <ModeDropIcon className="w-14 h-14 shrink-0 transition-transform duration-200 group-hover:-translate-y-0.5" />
+              </div>
 
-                <div className="grid grid-cols-3 gap-2.5 mt-5">
-                  <div className="hud-panel-sm p-3">
-                    <div className="text-[11px] text-slate-400">Kỷ lục</div>
-                    <div className="font-mono font-extrabold text-base sm:text-lg text-white tabular-nums mt-1">
-                      {(dropStats.allTimeHigh || 0).toLocaleString()}
-                    </div>
+              {/* 3 ô thông số lớn, đậm, rõ nét */}
+              <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+                <div className="hud-panel-sm px-3.5 py-3">
+                  <div className="text-xs sm:text-sm font-bold text-slate-300">Kỷ lục</div>
+                  <div className="font-mono font-black text-2xl sm:text-3xl text-white tabular-nums mt-1 leading-none">
+                    {(dropStats.allTimeHigh || 0).toLocaleString()}
                   </div>
-                  <div className="hud-panel-sm p-3">
-                    <div className="text-[11px] text-slate-400">Điểm tuần</div>
-                    <div className="font-mono font-extrabold text-base sm:text-lg text-purple-300 tabular-nums mt-1">
-                      {isGuest ? '—' : (dropStats.weeklyScore || 0).toLocaleString()}
-                    </div>
+                </div>
+                <div className="hud-panel-sm px-3.5 py-3">
+                  <div className="text-xs sm:text-sm font-bold text-slate-300">Điểm tuần</div>
+                  <div className="font-mono font-black text-2xl sm:text-3xl text-purple-300 tabular-nums mt-1 leading-none">
+                    {isGuest ? '—' : (dropStats.weeklyScore || 0).toLocaleString()}
                   </div>
-                  <div className="hud-panel-sm p-3">
-                    <div className="text-[11px] text-slate-400">Hàng tối đa</div>
-                    <div className="font-mono font-extrabold text-base sm:text-lg text-cyan-300 tabular-nums mt-1">
-                      {(dropStats.maxLines || 0).toLocaleString()}
-                    </div>
+                </div>
+                <div className="hud-panel-sm px-3.5 py-3">
+                  <div className="text-xs sm:text-sm font-bold text-slate-300">Hàng tối đa</div>
+                  <div className="font-mono font-black text-2xl sm:text-3xl text-amber-400 tabular-nums mt-1 leading-none">
+                    {(dropStats.maxLines || 0).toLocaleString()}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end pt-2 border-t border-white/8">
-                <span className="btn-arcade btn-arcade-purple px-5 py-2.5 text-xs sm:text-sm font-extrabold inline-flex items-center gap-2">
-                  <PlayTriIcon className="w-3.5 h-3.5" />
-                  Chơi 10×20
-                </span>
-              </div>
+              {/* Nút chơi toàn chiều rộng đặt sát ngay dưới ô thông số */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  soundEngine.unlock();
+                  soundEngine.playButtonClick();
+                  onStartGame('dropMode');
+                }}
+                className="btn-arcade btn-arcade-purple w-full py-3.5 text-base sm:text-lg font-black uppercase tracking-wider inline-flex items-center justify-center gap-2.5 cursor-pointer"
+              >
+                <PlayTriIcon className="w-4 h-4" />
+                Chơi 10×20
+              </button>
             </div>
           </div>
         </section>
 
-        {/* Thanh thưởng tuần */}
+        {/* 4. Thanh thưởng BXH tuần lớn, rõ ràng */}
         <footer className="hud-drop">
-          <div className="hud-panel px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-slate-300">
-              <TrophyHexIcon className="w-5 h-5 shrink-0" />
+          <div className="hud-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3 text-sm sm:text-base font-bold">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-slate-200">
+              <TrophyHexIcon className="w-6 h-6 shrink-0" />
               <span>Thưởng BXH Thứ Hai 00:00 (VN):</span>
-              <span className="font-mono font-bold text-amber-300 tabular-nums">
+              <span className="font-mono font-black text-amber-300 tabular-nums">
                 Hạng 1: +1,500 Xu
               </span>
               <span className="text-slate-500 select-none" aria-hidden="true">
                 ·
               </span>
-              <span className="font-mono font-bold text-slate-100 tabular-nums">
+              <span className="font-mono font-black text-slate-100 tabular-nums">
                 Hạng 2: +800 Xu
               </span>
               <span className="text-slate-500 select-none" aria-hidden="true">
                 ·
               </span>
-              <span className="font-mono font-bold text-orange-300 tabular-nums">
+              <span className="font-mono font-black text-orange-300 tabular-nums">
                 Hạng 3: +400 Xu
               </span>
             </div>
@@ -409,7 +423,7 @@ export default function HomeScreen({
                 soundEngine.playButtonClick();
                 onOpenLeaderboard('dragMode');
               }}
-              className="text-xs font-bold text-[#00f3ff] hover:text-cyan-200 cursor-pointer shrink-0"
+              className="text-sm sm:text-base font-extrabold text-[#00f3ff] hover:text-cyan-200 cursor-pointer shrink-0"
             >
               Xem bảng xếp hạng →
             </button>
