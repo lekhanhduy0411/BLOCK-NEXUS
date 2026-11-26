@@ -71,7 +71,7 @@ export default function LoadingScreen({ onComplete }) {
   const activeCells = Math.round((progress / 100) * TOTAL_CELLS);
 
   return (
-    <div className="min-h-dvh w-full bg-[#070913] flex flex-col items-center justify-center px-5 relative overflow-hidden">
+    <div className="min-h-dvh w-full bg-[#060a16] flex flex-col items-center justify-center safe-screen relative overflow-hidden">
       <div className="hud-cockpit-overlay" />
 
       <div className="hud-drop w-full max-w-md relative z-10 animate-screen-in">

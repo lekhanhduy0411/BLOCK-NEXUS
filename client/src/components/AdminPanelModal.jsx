@@ -128,8 +128,8 @@ export default function AdminPanelModal({ currentUser, onUserUpdated, onClose })
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-[#040711]/84 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-4xl h-[90dvh] max-h-[90dvh] flex flex-col min-h-0 animate-modal-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/84 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-4xl h-full max-h-full flex flex-col min-h-0 animate-modal-in">
         <div className="hud-panel-amber flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Tiêu đề */}
           <div className="px-5 py-4 border-b border-amber-400/25 shrink-0 flex items-center justify-between gap-3">

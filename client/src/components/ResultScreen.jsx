@@ -60,8 +60,8 @@ export default function ResultScreen({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#050812]/80 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-md animate-modal-in">
+    <div className="fixed inset-0 z-40 flex items-center justify-center safe-screen bg-[#050812]/80 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-md max-h-full overflow-y-auto animate-modal-in">
         <div className="hud-panel p-5 sm:p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <span className="text-xs font-semibold px-2.5 py-0.5 bg-white/8 border border-white/15 text-slate-300">

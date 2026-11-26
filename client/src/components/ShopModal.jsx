@@ -139,8 +139,8 @@ export default function ShopModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-[#040711]/85 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-5xl h-[92dvh] max-h-[92dvh] flex flex-col min-h-0 animate-modal-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/85 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-5xl h-full max-h-full flex flex-col min-h-0 animate-modal-in">
         <div className="hud-panel flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Tiêu đề & số dư */}
           <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-cyan-400/20 shrink-0">

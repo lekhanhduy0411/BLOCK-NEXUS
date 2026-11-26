@@ -871,6 +871,11 @@ export default function VelocityEngine({
     computeLayout();
     const resizeObserver = new ResizeObserver(computeLayout);
     resizeObserver.observe(container);
+    const visualViewport = window.visualViewport;
+    if (visualViewport) {
+      visualViewport.addEventListener('resize', computeLayout);
+    }
+    window.addEventListener('orientationchange', computeLayout);
 
     spawnNextPiece();
     syncHud();
@@ -1414,6 +1419,10 @@ export default function VelocityEngine({
     return () => {
       cancelAnimationFrame(rafId);
       resizeObserver.disconnect();
+      if (visualViewport) {
+        visualViewport.removeEventListener('resize', computeLayout);
+      }
+      window.removeEventListener('orientationchange', computeLayout);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', triggerAutoPauseIfActive);
@@ -1451,7 +1460,7 @@ export default function VelocityEngine({
   };
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-between w-full max-w-2xl mx-auto px-2 pb-2 gap-2 overflow-hidden select-none">
+    <div className="flex flex-1 flex-col items-center justify-between w-full max-w-2xl mx-auto safe-px safe-pb gap-2 overflow-hidden min-h-0 game-touch-surface">
       {/* Main Arena Row: 10x20 CANVAS | NEXT (Classic Unified Layout for Mobile & PC) */}
       <div className="flex flex-1 w-full items-stretch justify-center gap-2.5 sm:gap-3.5 min-h-0">
         {/* Center: 10x20 Canvas */}
@@ -1461,7 +1470,7 @@ export default function VelocityEngine({
         >
           <canvas
             ref={canvasRef}
-            className="shadow-[0_0_28px_rgba(0,243,255,0.16)] touch-none block"
+            className="shadow-[0_0_28px_rgba(0,243,255,0.16)] game-touch-surface block"
           />
         </div>
 

@@ -60,26 +60,26 @@ export default function ChallengeMapModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-[#040711]/85 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/85 backdrop-blur-md"
       onClick={onClose}
     >
       <div
-        className="hud-drop w-full max-w-4xl max-h-[93dvh] flex flex-col min-h-0 animate-modal-in"
+        className="hud-drop w-full max-w-4xl h-full max-h-full flex flex-col min-h-0 animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="hud-panel flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Header */}
-          <div className="px-4 sm:px-5 py-3.5 border-b border-cyan-400/20 flex items-center justify-between gap-2 shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 hud-panel-sm border border-amber-400/55 bg-amber-500/12 flex items-center justify-center text-amber-300 shrink-0">
-                <Swords className="w-5 h-5" />
+          <div className="px-3.5 sm:px-5 py-3 sm:py-3.5 border-b border-cyan-400/20 flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 hud-panel-sm border border-amber-400/55 bg-amber-500/12 flex items-center justify-center text-amber-300 shrink-0">
+                <Swords className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-base sm:text-xl font-black text-white tracking-tight truncate">
-                  CHIẾN DỊCH 50 MÀN THỬ THÁCH
+                <h2 className="text-sm sm:text-xl font-black text-white tracking-tight leading-tight">
+                  CHIẾN DỊCH 50 MÀN
                 </h2>
                 <p className="text-[11px] sm:text-xs text-slate-400 truncate">
-                  Tiến trình vĩnh viễn · Không tính giờ · Thưởng tối đa 10.000 Xu
+                  Không tính giờ · Thưởng tối đa 10.000 Xu
                 </p>
               </div>
             </div>

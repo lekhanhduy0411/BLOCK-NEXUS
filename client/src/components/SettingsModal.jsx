@@ -72,8 +72,8 @@ export default function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#040711]/82 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-sm animate-modal-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/82 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-sm max-h-full overflow-y-auto animate-modal-in">
         <div className="hud-panel overflow-hidden">
           {/* Tiêu đề */}
           <div className="px-5 py-4 border-b border-cyan-400/20 flex items-center justify-between">

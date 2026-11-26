@@ -160,17 +160,17 @@ export default function LeaderboardModal({
         : localChallengeProgress?.totalChallengeScore || 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-[#040711]/82 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-2xl h-[88dvh] max-h-[88dvh] flex flex-col min-h-0 animate-modal-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/82 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-2xl h-full max-h-full flex flex-col min-h-0 animate-modal-in">
         <div className="hud-panel flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Tiêu đề */}
-          <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-cyan-400/20 shrink-0">
+          <div className="px-3.5 sm:px-5 pt-3.5 sm:pt-4 pb-3 border-b border-cyan-400/20 shrink-0">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-3 min-w-0">
-                <TrophyHexIcon className="w-10 h-10 shrink-0" />
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <TrophyHexIcon className="w-9 h-9 sm:w-10 sm:h-10 shrink-0" />
                 <div className="min-w-0">
-                  <h2 className="text-base sm:text-xl font-extrabold text-white tracking-tight truncate">
-                    {isChallengeTab ? 'BXH THỬ THÁCH 50 MÀN' : 'BẢNG XẾP HẠNG TUẦN'}
+                  <h2 className="text-sm sm:text-xl font-extrabold text-white tracking-tight leading-tight">
+                    {isChallengeTab ? 'BXH 50 MÀN' : 'BẢNG XẾP HẠNG'}
                   </h2>
                   {isChallengeTab ? (
                     <div className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold mt-0.5">

@@ -56,12 +56,12 @@ export default function HomeScreen({
 
   const claimableQuestsCount = !isGuest
     ? (currentUser?.dailyQuests || []).filter(
-        (q) => !q.claimed && (q.progress || 0) >= (q.target || 1)
-      ).length
+      (q) => !q.claimed && (q.progress || 0) >= (q.target || 1)
+    ).length
     : 0;
 
   return (
-    <div className="min-h-dvh w-full flex flex-col justify-center px-4 sm:px-6 py-4 relative overflow-x-hidden animate-screen-in">
+    <div className="min-h-dvh w-full flex flex-col justify-center safe-pt safe-pb safe-px sm:px-6 relative overflow-x-hidden animate-screen-in">
       <GameBackdrop bgId={activeTheme.id} isPreview={false} />
       <div className="hud-cockpit-overlay" />
 
@@ -77,9 +77,8 @@ export default function HomeScreen({
                     {avatarInitials}
                   </span>
                   <span
-                    className={`absolute bottom-1 right-1 w-2 h-2 ${
-                      isGuest ? 'bg-amber-400' : 'bg-emerald-400'
-                    }`}
+                    className={`absolute bottom-1 right-1 w-2 h-2 ${isGuest ? 'bg-amber-400' : 'bg-emerald-400'
+                      }`}
                   />
                 </div>
 
@@ -286,7 +285,7 @@ export default function HomeScreen({
             className="btn-arcade btn-arcade-amber px-4 sm:px-5 py-3 text-sm sm:text-base font-black inline-flex items-center justify-center gap-2.5 w-full sm:w-auto cursor-pointer shadow-[0_0_24px_rgba(245,158,11,0.28)]"
           >
             <Swords className="w-5 h-5 shrink-0" />
-            <span>Thử Thách 50 Màn</span>
+            <span>Chế độ thử thách</span>
             <span className="font-mono text-xs px-2 py-0.5 bg-slate-950/75 text-amber-300 border border-amber-300/40 tabular-nums">
               {challengeProgress?.totalCleared ?? 0}/100
             </span>

@@ -643,6 +643,11 @@ export default function StrategistEngine({
     computeLayout();
     const resizeObserver = new ResizeObserver(computeLayout);
     resizeObserver.observe(container);
+    const visualViewport = window.visualViewport;
+    if (visualViewport) {
+      visualViewport.addEventListener('resize', computeLayout);
+    }
+    window.addEventListener('orientationchange', computeLayout);
 
     const spawnParticles = (cx, cy, color, count = 10, { starMode = false } = {}) => {
       for (let i = 0; i < count; i += 1) {
@@ -1697,6 +1702,10 @@ export default function StrategistEngine({
     return () => {
       cancelAnimationFrame(rafId);
       resizeObserver.disconnect();
+      if (visualViewport) {
+        visualViewport.removeEventListener('resize', computeLayout);
+      }
+      window.removeEventListener('orientationchange', computeLayout);
       canvas.removeEventListener('pointerdown', handlePointerDown);
       canvas.removeEventListener('pointermove', handlePointerMove);
       canvas.removeEventListener('pointerup', handlePointerUp);
@@ -1705,14 +1714,16 @@ export default function StrategistEngine({
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex flex-1 w-full items-center justify-center select-none overflow-hidden px-2"
-    >
-      <canvas
-        ref={canvasRef}
-        className="touch-none cursor-grab active:cursor-grabbing block"
-      />
+    <div className="flex flex-1 w-full min-h-0 safe-px safe-pb game-touch-surface">
+      <div
+        ref={containerRef}
+        className="relative flex flex-1 w-full h-full items-center justify-center overflow-hidden"
+      >
+        <canvas
+          ref={canvasRef}
+          className="game-touch-surface cursor-grab active:cursor-grabbing block"
+        />
+      </div>
     </div>
   );
 }

@@ -226,8 +226,8 @@ export default function GameplayScreen({
       />
       <div className="hud-cockpit-overlay" />
 
-      {/* Thanh điểm trên cùng */}
-      <header className="w-full max-w-2xl mx-auto px-3 pt-2 pb-1 shrink-0 z-10 space-y-1">
+      {/* Thanh điểm trên cùng — bảo vệ an toàn khỏi đồng hồ, tai thỏ, camera đục lỗ & pin */}
+      <header className="w-full max-w-2xl mx-auto safe-pt safe-px pb-1 shrink-0 z-10 space-y-1">
         <div className="hud-drop">
           <div className="hud-panel px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2">
             <button
@@ -510,7 +510,7 @@ export default function GameplayScreen({
 
       {/* Auto-Pause Overlay for 10×20 (triggers 3 -> 2 -> 1 Canvas countdown on Resume) */}
       {autoPaused && !resultOverlay && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center p-4 bg-[#040711]/78 backdrop-blur-md">
+        <div className="fixed inset-0 z-30 flex items-center justify-center safe-screen bg-[#040711]/78 backdrop-blur-md">
           <div className="hud-drop w-full max-w-xs animate-modal-in">
             <div className="hud-panel p-5 text-center space-y-4">
               <div>

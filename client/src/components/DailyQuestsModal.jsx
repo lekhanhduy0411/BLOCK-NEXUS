@@ -67,25 +67,27 @@ export default function DailyQuestsModal({ currentUser, onUserUpdated, onClose }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#040711]/82 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/82 backdrop-blur-md"
       onClick={onClose}
     >
       <div
-        className="hud-drop w-full max-w-lg max-h-[90dvh] flex flex-col animate-modal-in"
+        className="hud-drop w-full max-w-lg max-h-full flex flex-col min-h-0 animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="hud-panel p-5 flex flex-col max-h-[90dvh] overflow-hidden">
+        <div className="hud-panel p-4 sm:p-5 flex flex-col max-h-full overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between gap-3 shrink-0 pb-3 border-b border-cyan-400/20">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 hud-panel-sm border border-cyan-400/50 flex items-center justify-center text-[#00f3ff] shrink-0">
+          <div className="flex items-center justify-between gap-2.5 shrink-0 pb-3 border-b border-cyan-400/20">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 hud-panel-sm border border-cyan-400/50 flex items-center justify-center text-[#00f3ff] shrink-0">
                 <ClipboardList className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-lg sm:text-xl font-black text-white tracking-tight truncate">
-                  Nhiệm Vụ Hằng Ngày
+                <h2 className="text-base sm:text-xl font-black text-white tracking-tight leading-tight">
+                  NHIỆM VỤ NGÀY
                 </h2>
-                <p className="text-xs text-slate-400">Làm mới lúc 00:00 mỗi ngày (giờ VN)</p>
+                <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                  Làm mới lúc 00:00 mỗi ngày (giờ VN)
+                </p>
               </div>
             </div>
 

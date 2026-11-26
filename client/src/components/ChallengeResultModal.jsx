@@ -38,8 +38,8 @@ export default function ChallengeResultModal({
   const hasNextStage = stage.stageNumber < 50;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#050812]/84 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-md animate-modal-in relative">
+    <div className="fixed inset-0 z-40 flex items-center justify-center safe-screen bg-[#050812]/84 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-md max-h-full overflow-y-auto animate-modal-in relative">
         <div
           className={`hud-panel p-5 sm:p-6 text-center relative overflow-hidden ${
             isFirstBossVictory

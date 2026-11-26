@@ -161,14 +161,14 @@ export default function ShopPreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-[#03050d]/90 backdrop-blur-md"
+      className="fixed inset-0 z-[60] flex items-center justify-center safe-screen bg-[#03050d]/90 backdrop-blur-md"
       onClick={onClose}
     >
       <div
-        className="hud-drop w-full max-w-2xl max-h-[92dvh] flex flex-col animate-modal-in"
+        className="hud-drop w-full max-w-2xl max-h-full flex flex-col min-h-0 animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="hud-panel overflow-hidden flex flex-col max-h-[92dvh]">
+        <div className="hud-panel overflow-hidden flex flex-col max-h-full">
           {/* Header */}
           <div className="px-4 py-3 border-b border-cyan-400/20 flex items-center justify-between gap-2 shrink-0 bg-[#070c1b]">
             <div className="flex items-center gap-2.5 min-w-0">

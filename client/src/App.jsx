@@ -667,7 +667,7 @@ export default function App() {
     : currentUser?.username || 'Người chơi';
 
   return (
-    <div className="min-h-dvh w-full bg-[#070913] text-slate-100">
+    <div className="min-h-dvh w-full bg-[#060a16] text-slate-100">
       {screen === 'LOADING' && <LoadingScreen onComplete={handleLoadingComplete} />}
 
       {screen === 'HOME' && (
@@ -774,7 +774,7 @@ export default function App() {
       {/* 8×8 Endless Saved Match Resume Prompt */}
       {showResumePrompt && savedDragSnapshot && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#040711]/82 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/82 backdrop-blur-md"
           onClick={() => setShowResumePrompt(false)}
         >
           <div

@@ -70,8 +70,8 @@ export default function AuthGateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#040711]/84 backdrop-blur-md">
-      <div className="hud-drop w-full max-w-md animate-modal-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-screen bg-[#040711]/84 backdrop-blur-md">
+      <div className="hud-drop w-full max-w-md max-h-full overflow-y-auto animate-modal-in">
         <div className="hud-panel p-6 relative">
           {allowClose && (
             <button
