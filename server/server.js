@@ -49,6 +49,7 @@ app.get('/api/health', (_req, res) => {
     ts: Date.now(),
     status: 'ok',
     service: 'block-nexus-api',
+    apiVersion: '2026-campaign-v1',
     dbConnected: mongoose.connection.readyState === 1,
     weekKey,
     nextResetAt: nextResetAt.toISOString(),

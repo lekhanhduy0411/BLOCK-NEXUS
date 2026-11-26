@@ -1,6 +1,9 @@
 import { getAuthToken } from './storage';
 
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_URL || '')
+  .trim()
+  .replace(/\/+$/, '')
+  .replace(/\/api$/i, '');
 
 async function request(path, { method = 'GET', body, token, timeoutMs = 45000 } = {}) {
   const controller = new AbortController();

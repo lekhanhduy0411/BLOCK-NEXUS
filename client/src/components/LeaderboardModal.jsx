@@ -63,6 +63,12 @@ export default function LeaderboardModal({
   const fetchBoard = useCallback(async (targetMode, targetFilter) => {
     setLoading(true);
     setError('');
+    setData((prev) => ({
+      ...prev,
+      entries: [],
+      myEntry: null,
+      maxStages: targetMode === 'challenge' ? (targetFilter === 'all' ? 100 : 50) : 100,
+    }));
     try {
       if (targetMode === 'challenge') {
         const res = await api.getChallengeLeaderboard(targetFilter);
